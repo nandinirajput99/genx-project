@@ -67,6 +67,12 @@ function JoinGame() {
                     status: gameData.status || "waiting",
                 })
             );
+
+            // Persist session locally
+            localStorage.setItem("gamePin", gamePin);
+            localStorage.setItem("currentPlayerId", playerData.id);
+            localStorage.setItem("currentPlayerNickname", playerName);
+
             navigate("/player/lobby");
 
         } catch (error) {
