@@ -15,9 +15,9 @@ function Navbar() {
         {/* Desktop Menu */}
         <div className="hidden md:flex items-center gap-6">
           <a href="/" className="hover:text-yellow-300 transition">Home</a>
-          <a href="/create" className="hover:text-yellow-300 transition">Create Quiz</a>
+          
           <a href="/join" className="hover:text-yellow-300 transition">Join Quiz</a>
-          <a href="/leaderboard" className="hover:text-yellow-300 transition">Leaderboard</a>
+          
           <button className="bg-yellow-400 text-purple-900 font-semibold px-4 py-1.5 rounded-full hover:bg-yellow-300 transition">
             Login
           </button>
@@ -36,9 +36,9 @@ function Navbar() {
       {menuOpen && (
         <div className="md:hidden flex flex-col gap-3 px-4 pb-4">
           <a href="/" className="hover:text-yellow-300">Home</a>
-          <a href="/create" className="hover:text-yellow-300">Create Quiz</a>
+          
           <a href="/join" className="hover:text-yellow-300">Join Quiz</a>
-          <a href="/leaderboard" className="hover:text-yellow-300">Leaderboard</a>
+          
           <button className="bg-yellow-400 text-purple-900 font-semibold px-4 py-1.5 rounded-full w-fit">
             Login
           </button>
