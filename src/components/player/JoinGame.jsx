@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-
 import { addPlayer } from "../../redux/playersSlice";
 import { setGame } from "../../redux/gameSlice";
-
 import { db } from "../../firebase/firebase";
 import {
   doc,
