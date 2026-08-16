@@ -15,13 +15,10 @@ import GameScreen from "./components/player/GameScreen";
 function App() {
   return (
     <Routes>
-<<<<<<< HEAD
       {/* First screen: Authentication */}
       <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<SignUp />} />
-=======
->>>>>>> 58dd035acccf7a9bac26aff7d4d9becf48659dc2
 
       {/* Second screen: Game Options */}
       <Route path="/game-options" element={<GameOptions />} />
@@ -30,50 +27,15 @@ function App() {
       <Route path="/join" element={<JoinGame />} />
       <Route path="/host" element={<CreateQuiz />} />
 
-      {/* Existing Host routes */}
+      {/* Host routes */}
       <Route path="/host/create" element={<CreateQuiz />} />
       <Route path="/host/lobby" element={<HostLobby />} />
       <Route path="/host/live" element={<LiveHost />} />
 
-<<<<<<< HEAD
-      {/* Existing Player routes */}
+      {/* Player routes */}
       <Route path="/player/join" element={<JoinGame />} />
       <Route path="/player/lobby" element={<PlayerLobby />} />
       <Route path="/player/game" element={<GameScreen />} />
-=======
-      {/* Host */}
-      <Route
-        path="/host/create"
-        element={<CreateQuiz />}
-      />
-
-      <Route
-        path="/host/lobby"
-        element={<HostLobby />}
-      />
-
-      <Route
-        path="/host/live"
-        element={<LiveHost />}
-      />
-
-      {/* Player */}
-      <Route
-        path="/player/join"
-        element={<JoinGame />}
-      />
-
-      <Route
-        path="/player/lobby"
-        element={<PlayerLobby />}
-      />
-
-      <Route
-        path="/player/game"
-        element={<GameScreen />}
-      />
-
->>>>>>> 58dd035acccf7a9bac26aff7d4d9becf48659dc2
     </Routes>
   );
 }
