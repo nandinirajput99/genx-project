@@ -222,7 +222,7 @@ export default function HostLobby({ quizId }) {
   if (isFinished) {
     const winner = displayPlayers[0];
     return (
-      <div className="min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-indigo-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-linear-to-b from-indigo-900 via-purple-900 to-indigo-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
         {/* Confetti canvas */}
         <ConfettiCanvas />
 
@@ -240,7 +240,7 @@ export default function HostLobby({ quizId }) {
             >
               ⬅️ Back
             </button>
-            <h2 className="text-2xl font-black bg-gradient-to-r from-yellow-300 via-amber-200 to-yellow-400 bg-clip-text text-transparent drop-shadow-md">
+            <h2 className="text-2xl font-black bg-linear-to-r from-yellow-300 via-amber-200 to-yellow-400 bg-clip-text text-transparent drop-shadow-md">
               🏆 FINAL PODIUM & RESULTS 🏆
             </h2>
             <button
@@ -253,7 +253,7 @@ export default function HostLobby({ quizId }) {
 
           {/* Winner Card (Special Treat) */}
           {winner && (
-            <div className="bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-600 p-1 rounded-3xl shadow-[0_0_30px_rgba(234,179,8,0.5)] mb-8 transform hover:scale-105 transition duration-300">
+            <div className="bg-linear-to-r from-yellow-500 via-amber-400 to-yellow-600 p-1 rounded-3xl shadow-[0_0_30px_rgba(234,179,8,0.5)] mb-8 transform hover:scale-105 transition duration-300">
               <div className="bg-indigo-950 rounded-[22px] p-6 text-center">
                 <span className="text-6xl block mb-2">👑</span>
                 <p className="text-yellow-400 font-extrabold uppercase tracking-widest text-xs mb-1">
@@ -273,7 +273,7 @@ export default function HostLobby({ quizId }) {
           )}
 
           {/* Leaderboard Position List */}
-          <div className="bg-black/25 rounded-2xl p-6 mb-8 max-h-[300px] overflow-y-auto border border-white/5">
+          <div className="bg-black/25 rounded-2xl p-6 mb-8 max-h-300px overflow-y-auto border border-white/5">
             <h4 className="text-lg font-bold text-gray-300 mb-4 text-left border-b border-white/10 pb-2">
               Leaderboard Rankings & Rewards
             </h4>
@@ -327,7 +327,7 @@ export default function HostLobby({ quizId }) {
                 dispatch(resetGame());
                 navigate("/host/create");
               }}
-              className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition duration-200 text-md"
+              className="bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition duration-200 text-md"
             >
               Host Another Quiz 🚀
             </button>
