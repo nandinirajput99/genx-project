@@ -8,4 +8,12 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] })
   ],
+  css: {
+    postcss: {
+      plugins: {
+        'tailwindcss': {},
+        'autoprefixer': {},
+      },
+    },
+  },
 })
