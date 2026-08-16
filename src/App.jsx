@@ -1,5 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 
+import Navbar from "./components/common/Navbar";
+
 import Login from "./components/auth/Login";
 import SignUp from "./components/auth/SignUp";
 import GameOptions from "./components/game/GameOptions";
@@ -14,29 +16,28 @@ import GameScreen from "./components/player/GameScreen";
 
 function App() {
   return (
-    <Routes>
-      {/* First screen: Authentication */}
-      <Route path="/" element={<Login />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<SignUp />} />
+    <>
+      <Navbar />
 
-      {/* Second screen: Game Options */}
-      <Route path="/game-options" element={<GameOptions />} />
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
 
-      {/* Direct /join and /host routes */}
-      <Route path="/join" element={<JoinGame />} />
-      <Route path="/host" element={<CreateQuiz />} />
+        <Route path="/game-options" element={<GameOptions />} />
 
-      {/* Host routes */}
-      <Route path="/host/create" element={<CreateQuiz />} />
-      <Route path="/host/lobby" element={<HostLobby />} />
-      <Route path="/host/live" element={<LiveHost />} />
+        <Route path="/join" element={<JoinGame />} />
+        <Route path="/host" element={<CreateQuiz />} />
 
-      {/* Player routes */}
-      <Route path="/player/join" element={<JoinGame />} />
-      <Route path="/player/lobby" element={<PlayerLobby />} />
-      <Route path="/player/game" element={<GameScreen />} />
-    </Routes>
+        <Route path="/host/create" element={<CreateQuiz />} />
+        <Route path="/host/lobby" element={<HostLobby />} />
+        <Route path="/host/live" element={<LiveHost />} />
+
+        <Route path="/player/join" element={<JoinGame />} />
+        <Route path="/player/lobby" element={<PlayerLobby />} />
+        <Route path="/player/game" element={<GameScreen />} />
+      </Routes>
+    </>
   );
 }
 

@@ -1,104 +1,3 @@
-// import { useDispatch, useSelector } from "react-redux";
-// import { fetchQuestions } from "../../redux/quizSlice";
-// import { useNavigate } from "react-router-dom";
-// import { db } from "../../firebase/firebase";
-// import { collection, addDoc, doc, setDoc } from "firebase/firestore";
-
-// function CreateQuiz() {
-//   const dispatch = useDispatch();
-//   const navigate = useNavigate();
-
-//   const { questions, loading, error } = useSelector(
-//     (state) => state.quiz
-//   );
-
-//   const handleFetchQuestions = () => {
-//     dispatch(fetchQuestions());
-//   };
-
-//   const handleHostQuiz = async () => {
-//     if (questions.length === 0) return;
-
-//     const formattedQuestions = questions.map((q) => {
-//       const options = [...q.incorrectAnswers, q.correctAnswer];
-//       return {
-//         id: q.id,
-//         question: q.question.text,
-//         questionText: q.question.text,
-//         options: options,
-//         correctAnswer: options.length - 1,
-//       };
-//     });
-
-//     try {
-//       await setDoc(doc(db, "quizzes", "default_quiz"), {
-//         questions: formattedQuestions,
-//       });
-//       navigate("/host/lobby");
-//     } catch (err) {
-//       console.error("Error hosting quiz:", err);
-//     }
-//   };
-
-//   return (
-//     <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg mt-10 text-center">
-//       <h1 className="text-3xl font-bold mb-6 text-indigo-600">Create Quiz</h1>
-
-//       <div className="flex justify-center gap-4 mb-6">
-//         <button
-//           onClick={handleFetchQuestions}
-//           className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg shadow-md"
-//         >
-//           Fetch Questions
-//         </button>
-
-//         {questions.length > 0 && (
-//           <button
-//             onClick={handleHostQuiz}
-//             className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-lg shadow-md"
-//           >
-//             Start Lobby & Host 🚀
-//           </button>
-//         )}
-//       </div>
-
-//       {loading && <p>Loading questions...</p>}
-
-//       {error && <p>{error}</p>}
-
-//       {questions.map((question, index) => (
-//         <div
-//           key={question.id}
-//           className="bg-white p-5 rounded-xl shadow mb-5"
-//         >
-//           <h3 className="text-xl font-bold mb-4">
-//             {index + 1}. {question.question.text}
-//           </h3>
-
-//           <div className="grid grid-cols-2 gap-3">
-//             {[
-//               ...question.incorrectAnswers,
-//               question.correctAnswer,
-//             ].map((option) => (
-//               <button
-//                 key={option}
-//                 className="border p-3 rounded-lg hover:bg-blue-100"
-//               >
-//                 {option}
-//               </button>
-//             ))}
-//           </div>
-//         </div>
-//       ))}
-//     </div>
-//   );
-// }
-
-// export default CreateQuiz;
-
-
-
-
 import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchQuestions } from "../../redux/quizSlice";
@@ -224,7 +123,7 @@ function CreateQuiz() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-900 to-slate-950 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-linear-to-br from-indigo-950 via-purple-900 to-slate-950 px-4 py-8 sm:px-6 lg:px-8">
 
       {/* Main Container */}
       <div className="mx-auto max-w-5xl">
@@ -274,7 +173,7 @@ function CreateQuiz() {
               <button
                 onClick={handleFetchQuestions}
                 disabled={loading}
-                className="group rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-blue-900/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-400 hover:to-indigo-500 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                className="group rounded-xl bg-linear-to-r from-blue-500 to-indigo-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-blue-900/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-400 hover:to-indigo-500 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="flex items-center justify-center gap-2">
                   {loading ? (
@@ -294,7 +193,7 @@ function CreateQuiz() {
               {questions.length > 0 && (
                 <button
                   onClick={handleHostQuiz}
-                  className="group rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-green-900/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500 active:translate-y-0"
+                  className="group rounded-xl bg-linear-to-r from-emerald-500 to-green-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-green-900/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500 active:translate-y-0"
                 >
                   <span className="flex items-center justify-center gap-2">
                     <span className="text-lg transition-transform duration-200 group-hover:rotate-12">
@@ -379,13 +278,12 @@ function CreateQuiz() {
               return (
                 <div
                   key={question.id}
-                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-white/[0.13]"
-                >
+                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-color-white/[0.13]">
 
                   {/* Question Header */}
                   <div className="flex items-start gap-4 border-b border-white/10 bg-white/5 p-5 sm:p-6">
 
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-black text-white shadow-lg">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 text-sm font-black text-white shadow-lg">
                       {index + 1}
                     </div>
 
@@ -406,7 +304,7 @@ function CreateQuiz() {
                     {options.map((option, optionIndex) => (
                       <div
                         key={`${question.id}-${optionIndex}`}
-                        className="group/option flex min-h-[64px] items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 transition-all duration-200 hover:border-indigo-400/40 hover:bg-indigo-500/10"
+                        className="group/option flex min-h-64px items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 transition-all duration-200 hover:border-indigo-400/40 hover:bg-indigo-500/10"
                       >
 
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm font-black text-indigo-300">
@@ -437,7 +335,7 @@ function CreateQuiz() {
 
         {/* Bottom CTA */}
         {questions.length > 0 && (
-          <div className="mt-8 rounded-3xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 p-6 text-center backdrop-blur-xl">
+          <div className="mt-8 rounded-3xl border border-emerald-400/20 bg-linear-to-r from-emerald-500/10 to-blue-500/10 p-6 text-center backdrop-blur-xl">
 
             <div className="mb-2 text-3xl">
               🎉
@@ -453,7 +351,7 @@ function CreateQuiz() {
 
             <button
               onClick={handleHostQuiz}
-              className="rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 px-8 py-3.5 font-black text-white shadow-lg shadow-green-900/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500"
+              className="rounded-xl bg-linear-to-r from-emerald-500 to-green-600 px-8 py-3.5 font-black text-white shadow-lg shadow-green-900/30 transition-all duration-200 hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500"
             >
               🚀 Start Lobby & Host
             </button>
