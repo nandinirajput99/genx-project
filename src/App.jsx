@@ -10,13 +10,7 @@ import GameScreen from "./components/player/GameScreen";
 
 function App() {
   return (
-<<<<<<< HEAD
-    // <BrowserRouter>
-      <Routes>
-=======
     <Routes>
->>>>>>> 253656b2f63590af94f8e61d23bf3d8c7603d0e2
-
       {/* Home */}
       <Route
         path="/"
@@ -75,12 +69,7 @@ function App() {
         element={<GameScreen />}
       />
 
-<<<<<<< HEAD
-      </Routes>
-    // </BrowserRouter>
-=======
     </Routes>
->>>>>>> 253656b2f63590af94f8e61d23bf3d8c7603d0e2
   );
 }
 
