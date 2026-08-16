@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchQuestions } from "../../redux/quizSlice";
+import { fetchQuestions,addQuestion } from "../../redux/quizSlice";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, setDoc } from "firebase/firestore";
@@ -88,6 +88,42 @@ function CreateQuiz() {
 
   const handleFetchQuestions = () => {
     dispatch(fetchQuestions());
+  };
+  // 👇 Custom question ke liye states
+  const [mode, setMode] = useState("fetch"); // "fetch" ya "custom"
+  const [customQuestionText, setCustomQuestionText] = useState("");
+  const [customOptions, setCustomOptions] = useState(["", "", "", ""]);
+  const [correctIndex, setCorrectIndex] = useState(0);
+
+  const handleOptionChange = (index, value) => {
+    const updated = [...customOptions];
+    updated[index] = value;
+    setCustomOptions(updated);
+  };
+
+  const handleAddCustomQuestion = () => {
+    if (!customQuestionText.trim() || customOptions.some((o) => !o.trim())) {
+      alert("Please fill the question and all 4 options!");
+      return;
+    }
+
+    const correctAnswerText = customOptions[correctIndex];
+    const incorrectAnswers = customOptions.filter((_, i) => i !== correctIndex);
+
+    const newQuestion = {
+      id: "custom_" + Date.now(),
+      question: { text: customQuestionText },
+      incorrectAnswers: incorrectAnswers,
+      correctAnswer: correctAnswerText,
+    };
+
+    dispatch(addQuestion(newQuestion));
+
+    setCustomQuestionText("");
+    setCustomOptions(["", "", "", ""]);
+    setCorrectIndex(0);
+
+    playSoundOfJoy();
   };
 
   const handleHostQuiz = async () => {
@@ -206,6 +242,74 @@ function CreateQuiz() {
             </div>
           </div>
         </div>
+        {/* Mode Toggle */}
+        <div className="mb-6 flex justify-center gap-3">
+          <button
+            onClick={() => setMode("fetch")}
+            className={`rounded-full px-5 py-2 font-bold text-sm transition ${
+              mode === "fetch"
+                ? "bg-indigo-500 text-white"
+                : "bg-white/10 text-slate-300 hover:bg-white/20"
+            }`}
+          >
+            🔄 Fetch from API
+          </button>
+          <button
+            onClick={() => setMode("custom")}
+            className={`rounded-full px-5 py-2 font-bold text-sm transition ${
+              mode === "custom"
+                ? "bg-indigo-500 text-white"
+                : "bg-white/10 text-slate-300 hover:bg-white/20"
+            }`}
+          >
+            ✍️ Add Your Own
+          </button>
+        </div>
+
+        {/* Custom Question Form */}
+        {mode === "custom" && (
+          <div className="mb-8 rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
+            <h3 className="mb-4 text-lg font-black text-white">Add Your Own Question</h3>
+
+            <input
+              type="text"
+              value={customQuestionText}
+              onChange={(e) => setCustomQuestionText(e.target.value)}
+              placeholder="Type your question..."
+              className="mb-3 w-full rounded-xl border border-white/20 bg-slate-950/40 p-3 text-white placeholder-slate-400 outline-none focus:border-indigo-400"
+            />
+
+            {customOptions.map((opt, idx) => (
+              <div key={idx} className="mb-2 flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="correctOption"
+                  checked={correctIndex === idx}
+                  onChange={() => setCorrectIndex(idx)}
+                  className="h-4 w-4 accent-emerald-500"
+                />
+                <input
+                  type="text"
+                  value={opt}
+                  onChange={(e) => handleOptionChange(idx, e.target.value)}
+                  placeholder={`Option ${idx + 1}`}
+                  className="w-full rounded-xl border border-white/20 bg-slate-950/40 p-3 text-white placeholder-slate-400 outline-none focus:border-indigo-400"
+                />
+              </div>
+            ))}
+
+            <p className="mb-3 text-xs text-slate-400">👆 Radio button se sahi answer select karo</p>
+
+            <button
+              onClick={handleAddCustomQuestion}
+              className="w-full rounded-xl bg-linear-to-r from-purple-500 to-indigo-600 px-6 py-3 font-bold text-white hover:from-purple-400 hover:to-indigo-500"
+            >
+              ➕ Add Question to Quiz
+            </button>
+          </div>
+        )}
+
+       
 
         {/* Loading */}
         {loading && (
@@ -268,100 +372,63 @@ function CreateQuiz() {
               </div>
             </div>
 
-            {questions.map((question, index) => {
-                const handleHostQuiz = async () => {
-                    if (questions.length === 0) return;
-                    const formattedQuestions = questions.map((q) => {
-                        const options = [
-                            ...q.incorrectAnswers,
-                            q.correctAnswer,
-                        ];
-                        
-                        options.sort(() => Math.random() - 0.5);
-                        return {
-                            id: q.id,
-                            question: q.question.text,
-                            questionText: q.question.text,
-                            options: options,
-                            correctAnswer: q.correctAnswer,
-                        };
-                    });
-                    
-                    formattedQuestions.sort(() => Math.random() - 0.5);
-                    
-                    try {
-                        await setDoc(doc(db, "quizzes", "default_quiz"), {
-                            questions: formattedQuestions,
-                        });
+           
+             
+           {questions.map((question, index) => {
+  const options = [...question.incorrectAnswers, question.correctAnswer];
 
-                        playSoundOfJoy();
+  return (
+    <div
+      key={question.id}
+      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-color-white/[0.13]"
+    >
+      {/* Question Header */}
+      <div className="flex items-start gap-4 border-b border-white/10 bg-white/5 p-5 sm:p-6">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 text-sm font-black text-white shadow-lg">
+          {index + 1}
+        </div>
 
-                        navigate("/host/lobby");
-                        
-                    } catch (err) {
-                        console.error("Error hosting quiz:", err);
-                    }
-                };
+        <div className="flex-1">
+          <p className="mb-1 text-xs font-bold uppercase tracking-widest text-indigo-300">
+            Question {index + 1}
+          </p>
 
-                return (
-                <div
-                  key={question.id}
-                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-color-white/[0.13]">
+          <h3 className="text-base font-bold leading-7 text-white sm:text-lg">
+            {question.question.text}
+          </h3>
+        </div>
+      </div>
 
-                  {/* Question Header */}
-                  <div className="flex items-start gap-4 border-b border-white/10 bg-white/5 p-5 sm:p-6">
+      {/* Options */}
+      <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
+        {options.map((option, optionIndex) => (
+          <div
+            key={`${question.id}-${optionIndex}`}
+            className="group/option flex min-h-64px items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 transition-all duration-200 hover:border-indigo-400/40 hover:bg-indigo-500/10"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm font-black text-indigo-300">
+              {String.fromCharCode(65 + optionIndex)}
+            </span>
 
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 text-sm font-black text-white shadow-lg">
-                      {index + 1}
-                    </div>
+            <span className="text-sm font-semibold leading-5 text-slate-200">
+              {option}
+            </span>
+          </div>
+        ))}
+      </div>
 
-                    <div className="flex-1">
-                      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-indigo-300">
-                        Question {index + 1}
-                      </p>
-
-                      <h3 className="text-base font-bold leading-7 text-white sm:text-lg">
-                        {question.question.text}
-                      </h3>
-                    </div>
-                  </div>
-
-                  {/* Options */}
-                  <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
-
-                    {options.map((option, optionIndex) => (
-                      <div
-                        key={`${question.id}-${optionIndex}`}
-                        className="group/option flex min-h-64px items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 transition-all duration-200 hover:border-indigo-400/40 hover:bg-indigo-500/10"
-                      >
-
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm font-black text-indigo-300">
-                          {String.fromCharCode(65 + optionIndex)}
-                        </span>
-
-                        <span className="text-sm font-semibold leading-5 text-slate-200">
-                          {option}
-                        </span>
-                      </div>
-                    ))}
-
-                  </div>
-
-                  {/* Question Footer */}
-                  <div className="border-t border-white/10 bg-black/10 px-5 py-3 sm:px-6">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
-                      <span>💡</span>
-                      <span>Choose the correct answer during the live game.</span>
-                    </div>
-                  </div>
-
-                </div>
-              );
-            })}
+      {/* Question Footer */}
+      <div className="border-t border-white/10 bg-black/10 px-5 py-3 sm:px-6">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+          <span>💡</span>
+          <span>Choose the correct answer during the live game.</span>
+        </div>
+      </div>
+    </div>
+  );
+})}
           </div>
         )}
-
-        {/* Bottom CTA */}
         {questions.length > 0 && (
           <div className="mt-8 rounded-3xl border border-emerald-400/20 bg-linear-to-r from-emerald-500/10 to-blue-500/10 p-6 text-center backdrop-blur-xl">
 
