@@ -8,7 +8,7 @@ import GameScreen from "./components/player/GameScreen";
 
 function App() {
   return (
-    <BrowserRouter>
+    // <BrowserRouter>
       <Routes>
 
         {/* Home */}
@@ -70,7 +70,7 @@ function App() {
         />
 
       </Routes>
-    </BrowserRouter>
+    // </BrowserRouter>
   );
 }
 
