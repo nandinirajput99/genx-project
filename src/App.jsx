@@ -1,4 +1,8 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
+
+import Login from "./components/auth/Login";
+import SignUp from "./components/auth/SignUp";
+import GameOptions from "./components/game/GameOptions";
 
 import CreateQuiz from "./components/host/CreateQuiz";
 import HostLobby from "./components/host/HostLobby";
@@ -11,64 +15,27 @@ import GameScreen from "./components/player/GameScreen";
 function App() {
   return (
     <Routes>
-      {/* Home */}
-      <Route
-        path="/"
-        element={
-          <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-            <h1 className="text-4xl font-bold">
-              Quiz Battle 🎯
-            </h1>
+      {/* First screen: Authentication */}
+      <Route path="/" element={<Login />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
 
-            <Link
-              to="/host/create"
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg"
-            >
-              Host a Quiz
-            </Link>
+      {/* Second screen: Game Options */}
+      <Route path="/game-options" element={<GameOptions />} />
 
-            <Link
-              to="/player/join"
-              className="bg-green-600 text-white px-6 py-3 rounded-lg"
-            >
-              Join Game
-            </Link>
-          </div>
-        }
-      />
+      {/* Direct /join and /host routes */}
+      <Route path="/join" element={<JoinGame />} />
+      <Route path="/host" element={<CreateQuiz />} />
 
-      {/* Host */}
-      <Route
-        path="/host/create"
-        element={<CreateQuiz />}
-      />
+      {/* Existing Host routes */}
+      <Route path="/host/create" element={<CreateQuiz />} />
+      <Route path="/host/lobby" element={<HostLobby />} />
+      <Route path="/host/live" element={<LiveHost />} />
 
-      <Route
-        path="/host/lobby"
-        element={<HostLobby />}
-      />
-
-      <Route
-        path="/host/live"
-        element={<LiveHost />}
-      />
-
-      {/* Player */}
-      <Route
-        path="/player/join"
-        element={<JoinGame />}
-      />
-
-      <Route
-        path="/player/lobby"
-        element={<PlayerLobby />}
-      />
-
-      <Route
-        path="/player/game"
-        element={<GameScreen />}
-      />
-
+      {/* Existing Player routes */}
+      <Route path="/player/join" element={<JoinGame />} />
+      <Route path="/player/lobby" element={<PlayerLobby />} />
+      <Route path="/player/game" element={<GameScreen />} />
     </Routes>
   );
 }
