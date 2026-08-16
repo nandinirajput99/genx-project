@@ -13,7 +13,7 @@ function Podium({ winners }) {
   ).length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-700 to-purple-900 text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-linear-to-b from-purple-700 to-purple-900 text-white flex flex-col items-center justify-center p-6">
 
       {/* Heading */}
       <h1 className="text-4xl font-bold mb-10">
