@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
@@ -7,32 +6,49 @@ import Podium from "../common/Podium";
 
 function GameScreen() {
     const navigate = useNavigate();
+
     const game = useSelector((state) => state.game);
     const players = useSelector((state) => state.players.players);
+
     const [gameData, setGameData] = useState(null);
     const [selectedAnswer, setSelectedAnswer] = useState("");
     const [submitted, setSubmitted] = useState(false);
+    const [isCorrect, setIsCorrect] = useState(null);
+
     const pin = game?.pin || localStorage.getItem("gamePin");
+
     const localPlayerId = localStorage.getItem("currentPlayerId");
-    const localPlayerNickname = localStorage.getItem("currentPlayerNickname");
+    const localPlayerNickname = localStorage.getItem(
+        "currentPlayerNickname"
+    );
 
     const currentPlayer =
-        gameData?.players?.find((p) => p.id === localPlayerId) ||
-        gameData?.players?.find((p) => p.nickname === localPlayerNickname) ||
-        players?.find((p) => p.id === localPlayerId) ||
+        gameData?.players?.find(
+            (p) => p.id === localPlayerId
+        ) ||
+        gameData?.players?.find(
+            (p) => p.nickname === localPlayerNickname
+        ) ||
+        players?.find(
+            (p) => p.id === localPlayerId
+        ) ||
         players?.[players.length - 1];
 
+    // Firebase se live game data
     useEffect(() => {
         if (!pin) {
             navigate("/");
             return;
         }
+
         const gameRef = doc(db, "games", pin);
+
         const unsubscribe = onSnapshot(gameRef, (snapshot) => {
             if (!snapshot.exists()) {
                 navigate("/");
                 return;
             }
+
             const data = snapshot.data();
             setGameData(data);
         });
@@ -40,19 +56,36 @@ function GameScreen() {
         return () => unsubscribe();
     }, [pin, navigate]);
 
-    // Sync player answer and submission status when gameData updates
+    // Player ka answer Firebase se sync
     useEffect(() => {
         if (gameData?.players) {
             const me = gameData.players.find(
-                (p) => p.id === localPlayerId || p.nickname === localPlayerNickname
+                (p) =>
+                    p.id === localPlayerId ||
+                    p.nickname === localPlayerNickname
             );
+
             if (me) {
                 setSubmitted(!!me.answered);
                 setSelectedAnswer(me.answer || "");
             }
         }
-    }, [gameData, localPlayerId, localPlayerNickname]);
+    }, [
+        gameData,
+        localPlayerId,
+        localPlayerNickname,
+    ]);
 
+    // Current question
+    const currentQuestionIndex =
+        gameData?.currentQuestionIndex ??
+        gameData?.currentQuestion ??
+        0;
+
+    const question =
+        gameData?.questions?.[currentQuestionIndex];
+
+    // Answer select
     const handleAnswer = (answer) => {
         if (submitted) {
             return;
@@ -61,27 +94,43 @@ function GameScreen() {
         setSelectedAnswer(answer);
     };
 
+    // Answer submit
     const submitAnswer = async () => {
-        if (selectedAnswer === "" || submitted || !gameData?.players) {
+        if (
+            selectedAnswer === "" ||
+            submitted ||
+            !gameData?.players ||
+            !question
+        ) {
             return;
         }
+
         try {
+            // Check correct / wrong
+            const answerIsCorrect =
+                selectedAnswer === question.correctAnswer;
+
+            setIsCorrect(answerIsCorrect);
+
             const gameRef = doc(db, "games", pin);
 
-            const updatedPlayers = gameData.players.map((player) => {
-                if (
-                    player.id === currentPlayer?.id ||
-                    player.nickname === currentPlayer?.nickname
-                ) {
-                    return {
-                        ...player,
-                        answer: selectedAnswer,
-                        answered: true,
-                    };
-                }
+            const updatedPlayers = gameData.players.map(
+                (player) => {
+                    if (
+                        player.id === currentPlayer?.id ||
+                        player.nickname ===
+                            currentPlayer?.nickname
+                    ) {
+                        return {
+                            ...player,
+                            answer: selectedAnswer,
+                            answered: true,
+                        };
+                    }
 
-                return player;
-            });
+                    return player;
+                }
+            );
 
             await updateDoc(gameRef, {
                 players: updatedPlayers,
@@ -89,17 +138,20 @@ function GameScreen() {
 
             setSubmitted(true);
         } catch (error) {
-            console.log("Answer submit error:", error);
+            console.log(
+                "Answer submit error:",
+                error
+            );
         }
     };
-
     if (!gameData) {
-        return (
+          return (
             <div className="min-h-screen bg-[#0b071e] text-white flex items-center justify-center p-4 font-sans select-none">
                 <div className="flex flex-col items-center space-y-4">
                     <div className="w-16 h-16 rounded-full bg-linear-to-b from-indigo-600 to-purple-900 border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(168,85,247,0.5)] animate-pulse">
                         ⏳
                     </div>
+
                     <p className="text-purple-300 font-medium tracking-wide animate-pulse">
                         Loading question...
                     </p>
@@ -108,15 +160,27 @@ function GameScreen() {
         );
     }
 
-    // Handle Game Finish
+    // Game finished
     if (gameData.status === "finished") {
-        const sorted = [...(gameData.players || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
-        return <Podium winners={sorted.map((p) => ({ name: p.nickname, score: p.score || 0 }))} />;
+        const sorted = [
+            ...(gameData.players || []),
+        ].sort(
+            (a, b) =>
+                (b.score || 0) -
+                (a.score || 0)
+        );
+
+        return (
+            <Podium
+                winners={sorted.map((p) => ({
+                    name: p.nickname,
+                    score: p.score || 0,
+                }))}
+            />
+        );
     }
 
-    const currentQuestionIndex = gameData.currentQuestionIndex ?? gameData.currentQuestion ?? 0;
-    const question = gameData.questions?.[currentQuestionIndex];
-
+    // Question nahi mili
     if (!question) {
         return (
             <div className="min-h-screen bg-[#0b071e] text-white flex items-center justify-center p-4 font-sans select-none">
@@ -124,6 +188,7 @@ function GameScreen() {
                     <div className="w-16 h-16 rounded-full bg-linear-to-b from-indigo-600 to-purple-900 border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(168,85,247,0.5)] animate-pulse">
                         ⏳
                     </div>
+
                     <h1 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
                         Waiting for question...
                     </h1>
@@ -132,8 +197,25 @@ function GameScreen() {
         );
     }
 
-    const optionLetters = ["A", "B", "C", "D", "E", "F"];
-    const avatars = ["🦉", "🎮", "🚀", "👑", "⭐", "🔥", "🎯", "⚡"];
+    const optionLetters = [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+    ];
+
+    const avatars = [
+        "🦉",
+        "🎮",
+        "🚀",
+        "👑",
+        "⭐",
+        "🔥",
+        "🎯",
+        "⚡",
+    ];
 
     return (
         <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-between p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
