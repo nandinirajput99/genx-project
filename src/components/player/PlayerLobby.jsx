@@ -33,8 +33,8 @@ function PlayerLobby() {
         setGameData(data);
 
         // Host has started the game
-        if (data.gameStarted === true) {
-          navigate("/game-screen");
+        if (data.status === "playing") {
+          navigate("/player/game");
         }
       },
       (error) => {
