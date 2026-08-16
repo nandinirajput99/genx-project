@@ -67,7 +67,7 @@ function JoinGame() {
                     status: gameData.status || "waiting",
                 })
             );
-            navigate("/player-lobby");
+            navigate("/player/lobby");
 
         } catch (error) {
             console.log("Join Game Error:", error);

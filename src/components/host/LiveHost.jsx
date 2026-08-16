@@ -4,15 +4,17 @@ import { db } from "../../firebase/firebase";
 import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 import { setCurrentQuestionIndex, setAnswerRevealed } from "../../redux/gameSlice";
 import { setPlayers } from "../../redux/playersSlice";
+import Podium from "../common/Podium";
 
 export default function LiveHost() {
   const dispatch = useDispatch();
   const game = useSelector((state) => state.game);
-  const players = useSelector((state) => state.player.players);
+  const players = useSelector((state) => state.players.players);
   
   const [questions, setQuestions] = useState([]);
   const [timeLeft, setTimeLeft] = useState(20);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  const [status, setStatus] = useState("playing");
 
   // Fetch questions from active game session in Firebase
   useEffect(() => {
@@ -22,6 +24,7 @@ export default function LiveHost() {
         const data = docSnap.data();
         if (data.questions) setQuestions(data.questions);
         if (data.players) dispatch(setPlayers(data.players));
+        if (data.status) setStatus(data.status);
       }
     });
     return () => unsubscribe();
@@ -34,12 +37,33 @@ export default function LiveHost() {
     let timer;
     if (isTimerActive && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    } else if (timeLeft === 0) {
+    } else if (timeLeft === 0 && isTimerActive) {
       setIsTimerActive(false);
-      dispatch(setAnswerRevealed(true));
+      
+      const autoReveal = async () => {
+        try {
+          const correctOption = currentQ.options?.[currentQ.correctAnswer];
+          const updatedPlayers = players.map((player) => {
+            const isCorrect = player.answer === correctOption;
+            return {
+              ...player,
+              score: (player.score || 0) + (isCorrect ? 100 : 0),
+            };
+          });
+
+          await updateDoc(doc(db, "games", game.pin), {
+            answerRevealed: true,
+            players: updatedPlayers,
+          });
+          dispatch(setAnswerRevealed(true));
+        } catch (err) {
+          console.error("Error auto-revealing answer:", err);
+        }
+      };
+      autoReveal();
     }
     return () => clearInterval(timer);
-  }, [isTimerActive, timeLeft, dispatch]);
+  }, [isTimerActive, timeLeft, dispatch, currentQ, players, game.pin]);
 
   const handleStartQuestionTimer = () => {
     setTimeLeft(currentQ.timer || 20);
@@ -48,6 +72,29 @@ export default function LiveHost() {
   };
 
   const handleNextQuestion = async () => {
+    if (!game.answerRevealed) {
+      try {
+        const correctOption = currentQ.options?.[currentQ.correctAnswer];
+        const updatedPlayers = players.map((player) => {
+          const isCorrect = player.answer === correctOption;
+          return {
+            ...player,
+            score: (player.score || 0) + (isCorrect ? 100 : 0),
+          };
+        });
+
+        await updateDoc(doc(db, "games", game.pin), {
+          answerRevealed: true,
+          players: updatedPlayers,
+        });
+        dispatch(setAnswerRevealed(true));
+        setIsTimerActive(false);
+      } catch (err) {
+        console.error("Error revealing answer:", err);
+      }
+      return;
+    }
+
     const nextIndex = game.currentQuestionIndex + 1;
     if (nextIndex < questions.length) {
       dispatch(setCurrentQuestionIndex(nextIndex));
@@ -55,19 +102,30 @@ export default function LiveHost() {
       setTimeLeft(20);
       setIsTimerActive(false);
 
+      const resetPlayers = players.map((player) => ({
+        ...player,
+        answer: "",
+        answered: false,
+      }));
+
       // Update in Firebase
       await updateDoc(doc(db, "games", game.pin), {
         currentQuestionIndex: nextIndex,
-        answerRevealed: false
+        answerRevealed: false,
+        players: resetPlayers,
       });
     } else {
       alert("Quiz Finished! Check Final Podium.");
       await updateDoc(doc(db, "games", game.pin), { status: "finished" });
+      setStatus("finished");
     }
   };
 
-
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
+  if (status === "finished") {
+    return <Podium winners={sortedPlayers.map(p => ({ name: p.nickname, score: p.score }))} />;
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-6 bg-white shadow-md rounded-lg mt-10">
