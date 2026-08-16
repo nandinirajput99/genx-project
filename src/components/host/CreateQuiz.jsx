@@ -1,97 +1,133 @@
-import { useDispatch, useSelector } from "react-redux";
-import { fetchQuestions } from "../../redux/quizSlice";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useDispatch } from "react-redux";
+import { setQuiz } from "../../redux/quizSlice";
 import { db } from "../../firebase/firebase";
-import { collection, adddoc, doc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 
-function CreateQuiz() {
+export default function CreateQuiz() {
   const dispatch = useDispatch();
-  const navigate = useNavigate();
+  const [title, setTitle] = useState("");
+  const [questions, setQuestions] = useState([]);
+  
+  const [questionText, setQuestionText] = useState("");
+  const [options, setOptions] = useState(["", "", "", ""]);
+  const [correctAnswer, setCorrectAnswer] = useState(0);
+  const [timer, setTimer] = useState(20);
+  const [loading, setLoading] = useState(false);
 
-  const { questions, loading, error } = useSelector(
-    (state) => state.quiz
-  );
-
-  const handleFetchQuestions = () => {
-    dispatch(fetchQuestions());
+  const handleOptionChange = (index, value) => {
+    const newOptions = [...options];
+    newOptions[index] = value;
+    setOptions(newOptions);
   };
 
-  const handleHostQuiz = async () => {
-    if (questions.length === 0) return;
+  const handleAddQuestion = () => {
+    if (!questionText.trim()) {
+      alert("Please enter question text!");
+      return;
+    }
+    const newQ = {
+      questionText,
+      options,
+      correctAnswer: Number(correctAnswer),
+      timer: Number(timer)
+    };
+    setQuestions([...questions, newQ]);
+    setQuestionText("");
+    setOptions(["", "", "", ""]);
+  };
 
-    const formattedQuestions = questions.map((q) => {
-      const options = [...q.incorrectAnswers, q.correctAnswer];
-      return {
-        id: q.id,
-        question: q.question.text,
-        questionText: q.question.text,
-        options: options,
-        correctAnswer: options.length - 1,
-      };
-    });
+  const handleSaveQuiz = async () => {
+    if (!title.trim() || questions.length === 0) {
+      alert("Please add a title and at least one question!");
+      return;
+    }
 
+    setLoading(true);
     try {
-      await setDoc(doc(db, "quizzes", "default_quiz"), {
-        questions: formattedQuestions,
-      });
-      navigate("/host/lobby");
-    } catch (err) {
-      console.error("Error hosting quiz:", err);
+      const quizId = "quiz_" + Date.now();
+      const quizData = { quizId, title, questions };
+
+      dispatch(setQuiz(quizData));
+      await setDoc(doc(db, "quizzes", quizId), quizData);
+
+      alert(`Quiz saved successfully! Game PIN / Quiz ID: ${quizId}`);
+    } catch (error) {
+      console.error("Error saving quiz: ", error);
+      alert("Failed to save quiz.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg mt-10 text-center">
-      <h1 className="text-3xl font-bold mb-6 text-indigo-600">Create Quiz</h1>
-
-      <div className="flex justify-center gap-4 mb-6">
-        <button
-          onClick={handleFetchQuestions}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg shadow-md"
-        >
-          Fetch Questions
-        </button>
-
-        {questions.length > 0 && (
-          <button
-            onClick={handleHostQuiz}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-lg shadow-md"
-          >
-            Start Lobby & Host 🚀
-          </button>
-        )}
+    <div className="max-w-xl mx-auto p-6 bg-white shadow-xl rounded-2xl mt-10 border border-indigo-100">
+      <h2 className="text-3xl font-extrabold mb-6 text-center text-indigo-600">Create Quiz (Host) 🎯</h2>
+      
+      <div className="mb-5">
+        <label className="block font-bold mb-2 text-gray-700">Quiz Title</label>
+        <input
+          type="text"
+          className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 outline-none"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Enter quiz title..."
+        />
       </div>
 
-      {loading && <p>Loading questions...</p>}
+      <hr className="my-6 border-gray-200" />
 
-      {error && <p>{error}</p>}
-
-      {questions.map((question, index) => (
-        <div
-          key={question.id}
-          className="bg-white p-5 rounded-xl shadow mb-5"
-        >
-          <h3 className="text-xl font-bold mb-4">
-            {index + 1}. {question.question.text}
-          </h3>
-
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              ...question.incorrectAnswers,
-              question.correctAnswer,
-            ].map((option) => (
-              <button
-                key={option}
-                className="border p-3 rounded-lg hover:bg-blue-100"
-              >
-                {option}
-              </button>
-            ))}
+      <h3 className="text-xl font-bold mb-3 text-gray-800">Add Question</h3>
+      <div className="space-y-3 mb-5">
+        <input
+          type="text"
+          className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 outline-none"
+          value={questionText}
+          onChange={(e) => setQuestionText(e.target.value)}
+          placeholder="Type your question here..."/>
+        {options.map((opt, idx) => (
+          <input
+            key={idx}
+            type="text"
+            className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 outline-none"
+            value={opt}
+            onChange={(e) => handleOptionChange(idx, e.target.value)}
+            placeholder={`Option ${idx + 1}`} />
+        ))}
+        <div className="flex gap-4 mb-3">
+          <div className="flex-1">
+            <label className="text-sm font-bold text-gray-600">Correct Option (0-3)</label>
+            <input
+              type="number"
+              min="0"
+              max="3"
+              className="w-full p-2 border-2 border-gray-200 rounded-xl mt-1"
+              value={correctAnswer}
+              onChange={(e) => setCorrectAnswer(e.target.value)}/>
+          </div>
+          <div className="flex-1">
+            <label className="text-sm font-bold text-gray-600">Timer (secs)</label>
+            <input
+              type="number"
+              className="w-full p-2 border-2 border-gray-200 rounded-xl mt-1"
+              value={timer}
+              onChange={(e) => setTimer(e.target.value)}/>
           </div>
         </div>
-      ))}
+        <button
+          onClick={handleAddQuestion}
+          className="w-full bg-indigo-500 text-white font-bold p-3 rounded-xl hover:bg-indigo-600 transition shadow-md">
+            + Add Question 
+          ({questions.length} added)
+        </button>
+      </div>
+
+      <button
+        onClick={handleSaveQuiz}
+        disabled={loading}
+        className="w-full bg-green-600 text-white font-extrabold p-3 rounded-xl hover:bg-green-700 transition shadow-lg text-lg">
+        {loading ? "Saving..." : "Save Quiz to Firebase 🚀"}
+      </button>
     </div>
   );
 }
-
-export default CreateQuiz;

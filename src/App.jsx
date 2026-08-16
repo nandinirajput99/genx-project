@@ -10,8 +10,7 @@ import GameScreen from "./components/player/GameScreen";
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <Routes>
 
       {/* Home */}
       <Route
@@ -71,8 +70,7 @@ function App() {
         element={<GameScreen />}
       />
 
-      </Routes>
-    </BrowserRouter>
+    </Routes>
   );
 }
 

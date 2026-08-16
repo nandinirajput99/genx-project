@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import {
   doc,
@@ -13,14 +14,18 @@ import { setGame, setGameStatus } from "../../redux/gameSlice";
 
 export default function HostLobby({ quizId }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const game = useSelector((state) => state.game);
-  const players = useSelector((state) => state.player.players);
+  const players = useSelector((state) => state.players.players);
+  const reduxQuizId = useSelector((state) => state.quiz.quizId);
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const activeQuizId = quizId || reduxQuizId || "default_quiz";
+
   // 1. HOST GAME PIN GENERATE KAREGA
   useEffect(() => {
-    if (!quizId) {
+    if (!activeQuizId) {
       console.error("Quiz ID is missing");
       setLoading(false);
       return;
@@ -35,36 +40,53 @@ export default function HostLobby({ quizId }) {
     const createGame = async () => {
       try {
         // Quiz Firebase se fetch karo
-        const quizRef = doc(db, "quizzes", quizId);
+        const quizRef = doc(db, "quizzes", activeQuizId);
         const quizSnap = await getDoc(quizRef);
 
-        if (!quizSnap.exists()) {
-          console.error("Quiz not found");
-          setLoading(false);
-          return;
-        }
-
-        const quizData = quizSnap.data();
+        const quizData = quizSnap.exists() ? quizSnap.data() : { questions: [] };
 
         // 2. SAME PIN KO FIREBASE GAME ID BANAO
         const gameData = {
           gameId: generatedPin,
           pin: generatedPin,
-          quizId: quizId,
+          quizId: activeQuizId,
           status: "waiting",
           currentQuestionIndex: 0,
           questionStartedAt: null,
           answerRevealed: false,
           players: [],
           questions: quizData.questions || []
-        });
+        };
+
+        await setDoc(
+          doc(db, "games", generatedPin),
+          gameData
+        );
+
+        // 3. SAME PIN REDUX ME BHI SAVE KARO
+        dispatch(
+          setGame({
+            gameId: generatedPin,
+            pin: generatedPin,
+            quizId: activeQuizId,
+            status: "waiting",
+            currentQuestionIndex: 0,
+            questionStartedAt: null,
+            answerRevealed: false,
+          })
+        );
+
+        setLoading(false);
+
+        console.log("Game created with PIN:", generatedPin);
       } catch (err) {
         console.error("Error starting game session:", err);
+        setLoading(false);
       }
     };
 
-    initializeGameSession();
-  }, [quizId]);
+    createGame();
+  }, [activeQuizId, dispatch]);
 
   // 4. FIREBASE SE PLAYERS REAL-TIME LISTEN KARO
   useEffect(() => {
@@ -133,8 +155,10 @@ export default function HostLobby({ quizId }) {
       );
 
       dispatch(setGameStatus("playing"));
+      navigate("/host/live");
     } catch (err) {
       console.error("Error starting game:", err);
+      alert("Failed to start game.");
     }
   };
 
