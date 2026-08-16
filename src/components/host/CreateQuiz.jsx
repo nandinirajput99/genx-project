@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useDispatch } from "react-redux";
 import { setQuiz } from "../../redux/quizSlice";
 import { db } from "../../firebase/firebase";
-import { doc, setDoc } from "firebase/firestore";
+// import { doc, setDoc } from "firebase/firestor";
 
 export default function CreateQuiz() {
   const dispatch = useDispatch();
