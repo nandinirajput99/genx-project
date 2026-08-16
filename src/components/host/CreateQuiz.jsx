@@ -2,7 +2,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchQuestions } from "../../redux/quizSlice";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
-import { collection, adddoc, doc, setDoc } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc } from "firebase/firestore";
 
 function CreateQuiz() {
   const dispatch = useDispatch();
