@@ -1,11 +1,11 @@
 import { configureStore } from "@reduxjs/toolkit";
 import quizReducer from "./quizSlice";
 import gameReducer from "./gameSlice";
-import playerReducer from "./playersSlice";
+import playersReducer from "./playersSlice";
 export const store = configureStore({
   reducer: {
     quiz: quizReducer,
     game: gameReducer,
-    players: playerReducer,
+    players: playersReducer,
   },
 });

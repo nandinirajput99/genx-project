@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import { setPlayers } from "../../redux/playersSlice";
-import { setGameStatus } from "../../redux/gameSlice";
+import { setGame, setGameStatus } from "../../redux/gameSlice";
 
 export default function HostLobby({ quizId }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const game = useSelector((state) => state.game);
-  const players = useSelector((state) => state.player.players);
+  const players = useSelector((state) => state.players.players);
   const [pin, setPin] = useState("");
 
   useEffect(() => {
@@ -33,13 +35,22 @@ export default function HostLobby({ quizId }) {
           players: [],
           questions: quizData.questions || []
         });
+
+        // Store game session in Redux
+        dispatch(setGame({
+          gameId: generatedPin,
+          pin: generatedPin,
+          quizId: quizId || "default_quiz",
+          status: "waiting",
+          currentQuestionIndex: 0
+        }));
       } catch (err) {
         console.error("Error starting game session:", err);
       }
     };
 
     initializeGameSession();
-  }, [quizId]);
+  }, [quizId, dispatch]);
 
   // Real-time listener for players joining
   useEffect(() => {
@@ -61,6 +72,7 @@ export default function HostLobby({ quizId }) {
       const gameRef = doc(db, "games", pin);
       await setDoc(gameRef, { status: "playing" }, { merge: true });
       dispatch(setGameStatus("playing"));
+      navigate("/host/live");
     } catch (err) {
       console.error("Error starting game:", err);
     }

@@ -90,7 +90,7 @@ function GameScreen() {
     );
   }
 
-  const question = gameData.questions?.[gameData.currentQuestion];
+  const question = gameData.questions?.[gameData.currentQuestionIndex];
 
   if (!question) {
     return (
@@ -160,7 +160,7 @@ function GameScreen() {
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">Question</span>
               <span className="text-lg font-black text-amber-300">
-                {gameData.currentQuestion + 1} <span className="text-purple-400/60 font-medium text-sm">/ {gameData.questions?.length || 10}</span>
+                {gameData.currentQuestionIndex + 1} <span className="text-purple-400/60 font-medium text-sm">/ {gameData.questions?.length || 10}</span>
               </span>
             </div>
 
