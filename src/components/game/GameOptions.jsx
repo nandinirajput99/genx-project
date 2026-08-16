@@ -33,7 +33,7 @@ function GameOptions() {
             textShadow: "0 2px 0 #b45309, 0 4px 0 #78350f, 0 6px 12px rgba(0,0,0,0.8)",
           }}
         >
-          Trivia Battle
+          KWIZZ
         </h1>
         <p className="text-purple-200/80 text-xs sm:text-sm font-semibold tracking-wide mt-2">
           Challenge your friends and test your knowledge!
