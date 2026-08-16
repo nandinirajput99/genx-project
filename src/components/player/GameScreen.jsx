@@ -3,6 +3,8 @@ import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import Podium from "../common/Podium";
+
 function GameScreen() {
   const navigate = useNavigate();
   const game = useSelector((state) => state.game);
@@ -10,9 +12,16 @@ function GameScreen() {
   const [gameData, setGameData] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const pin = game?.pin;
+  
+  const pin = game?.pin || localStorage.getItem("gamePin");
+  const localPlayerId = localStorage.getItem("currentPlayerId");
+  const localPlayerNickname = localStorage.getItem("currentPlayerNickname");
 
-  const currentPlayer = players?.[players.length - 1];
+  const currentPlayer =
+    gameData?.players?.find((p) => p.id === localPlayerId) ||
+    gameData?.players?.find((p) => p.nickname === localPlayerNickname) ||
+    players?.find((p) => p.id === localPlayerId) ||
+    players?.[players.length - 1];
 
   useEffect(() => {
     if (!pin) {
@@ -29,12 +38,24 @@ function GameScreen() {
       }
 
       const data = snapshot.data();
-
       setGameData(data);
     });
 
     return () => unsubscribe();
   }, [pin, navigate]);
+
+  // Sync player answer and submission status when gameData updates
+  useEffect(() => {
+    if (gameData?.players) {
+      const me = gameData.players.find(
+        (p) => p.id === localPlayerId || p.nickname === localPlayerNickname
+      );
+      if (me) {
+        setSubmitted(!!me.answered);
+        setSelectedAnswer(me.answer || "");
+      }
+    }
+  }, [gameData, localPlayerId, localPlayerNickname]);
 
   const handleAnswer = (answer) => {
     if (submitted) {
@@ -45,7 +66,7 @@ function GameScreen() {
   };
 
   const submitAnswer = async () => {
-    if (selectedAnswer === "" || submitted) {
+    if (selectedAnswer === "" || submitted || !gameData?.players) {
       return;
     }
 
@@ -53,7 +74,10 @@ function GameScreen() {
       const gameRef = doc(db, "games", pin);
 
       const updatedPlayers = gameData.players.map((player) => {
-        if (player.id === currentPlayer?.id) {
+        if (
+          player.id === currentPlayer?.id ||
+          player.nickname === currentPlayer?.nickname
+        ) {
           return {
             ...player,
             answer: selectedAnswer,
@@ -69,7 +93,6 @@ function GameScreen() {
       });
 
       setSubmitted(true);
-
     } catch (error) {
       console.log("Answer submit error:", error);
     }
@@ -90,7 +113,14 @@ function GameScreen() {
     );
   }
 
-  const question = gameData.questions?.[gameData.currentQuestionIndex];
+  // Handle Game Finish
+  if (gameData.status === "finished") {
+    const sorted = [...(gameData.players || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
+    return <Podium winners={sorted.map((p) => ({ name: p.nickname, score: p.score || 0 }))} />;
+  }
+
+  const currentQuestionIndex = gameData.currentQuestionIndex ?? gameData.currentQuestion ?? 0;
+  const question = gameData.questions?.[currentQuestionIndex];
 
   if (!question) {
     return (
