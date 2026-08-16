@@ -29,15 +29,16 @@ function App() {
         <Route path="/join" element={<JoinGame />} />
         <Route path="/host" element={<CreateQuiz />} />
 
-        <Route path="/host/create" element={<CreateQuiz />} />
-        <Route path="/host/lobby" element={<HostLobby />} />
-        <Route path="/host/live" element={<LiveHost />} />
+      {/* Existing Host routes */}
+      <Route path="/host/create" element={<CreateQuiz />} />
+      <Route path="/host/lobby" element={<HostLobby />} />
+      <Route path="/host/live" element={<LiveHost />} />
 
-        <Route path="/player/join" element={<JoinGame />} />
-        <Route path="/player/lobby" element={<PlayerLobby />} />
-        <Route path="/player/game" element={<GameScreen />} />
-      </Routes>
-    </>
+      {/* Existing Player routes */}
+      <Route path="/player/join" element={<JoinGame />} />
+      <Route path="/player/lobby" element={<PlayerLobby />} />
+      <Route path="/player/game" element={<GameScreen />} />
+    </Routes>
   );
 }
 

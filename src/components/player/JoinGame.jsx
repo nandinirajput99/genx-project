@@ -134,7 +134,7 @@ function JoinGame() {
                             textShadow: "0 2px 0 #b45309, 0 4px 0 #78350f, 0 6px 12px rgba(0,0,0,0.8)",
                         }}
                     >
-                        Kuuizz
+                        KWIZZ
                     </h1>
                     <div className="text-lg sm:text-2xl font-black tracking-widest text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] -mt-1 sm:mt-0">
                         GAME QUIZ
@@ -194,7 +194,7 @@ function JoinGame() {
                             Welcome <span className="text-purple-400">Back!</span>
                         </h2>
                         <p className="text-center text-purple-200/60 text-xs sm:text-sm mt-1 mb-6 font-medium">
-                            Join to continue your Kuuizz journey 🚀
+                            Join to continue your KWizz journey 🚀
                         </p>
 
                         <form onSubmit={handleJoin} className="space-y-4">
