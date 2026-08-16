@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { db } from "../../firebase/firebase";
 import {
   doc,
@@ -13,9 +13,8 @@ import { setGame, setGameStatus } from "../../redux/gameSlice";
 
 export default function HostLobby({ quizId }) {
   const dispatch = useDispatch();
-
+  const game = useSelector((state) => state.game);
   const players = useSelector((state) => state.player.players);
-
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -57,38 +56,15 @@ export default function HostLobby({ quizId }) {
           questionStartedAt: null,
           answerRevealed: false,
           players: [],
-          questions: quizData.questions || [],
-        };
-
-        await setDoc(
-          doc(db, "games", generatedPin),
-          gameData
-        );
-
-        // 3. SAME PIN REDUX ME BHI SAVE KARO
-        dispatch(
-          setGame({
-            gameId: generatedPin,
-            pin: generatedPin,
-            quizId: quizId,
-            status: "waiting",
-            currentQuestionIndex: 0,
-            questionStartedAt: null,
-            answerRevealed: false,
-          })
-        );
-
-        setLoading(false);
-
-        console.log("Game created with PIN:", generatedPin);
-      } catch (error) {
-        console.error("Error creating game:", error);
-        setLoading(false);
+          questions: quizData.questions || []
+        });
+      } catch (err) {
+        console.error("Error starting game session:", err);
       }
     };
 
-    createGame();
-  }, [quizId, dispatch]);
+    initializeGameSession();
+  }, [quizId]);
 
   // 4. FIREBASE SE PLAYERS REAL-TIME LISTEN KARO
   useEffect(() => {
@@ -157,9 +133,8 @@ export default function HostLobby({ quizId }) {
       );
 
       dispatch(setGameStatus("playing"));
-    } catch (error) {
-      console.error("Error starting game:", error);
-      alert("Failed to start game.");
+    } catch (err) {
+      console.error("Error starting game:", err);
     }
   };
 
