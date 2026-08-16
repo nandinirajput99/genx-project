@@ -65,8 +65,6 @@ function GameScreen() {
         if (selectedAnswer === "" || submitted || !gameData?.players) {
             return;
         }
-
-
         try {
             const gameRef = doc(db, "games", pin);
 
