@@ -7,9 +7,7 @@ function PlayerLobby() {
   const navigate = useNavigate();
   const game = useSelector((state) => state.game);
   const players = useSelector((state) => state.players.players);
-
   const [gameData, setGameData] = useState(null);
-
   const pin = game?.pin || localStorage.getItem("gamePin");
 
   useEffect(() => {
