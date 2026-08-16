@@ -39,6 +39,7 @@ function App() {
       <Route path="/player/lobby" element={<PlayerLobby />} />
       <Route path="/player/game" element={<GameScreen />} />
     </Routes>
+    </>
   );
 }
 
