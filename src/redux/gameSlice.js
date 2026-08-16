@@ -12,6 +12,10 @@ const initialState = {
   questionStartedAt: null,
 
   answerRevealed: false,
+
+  // Answer statistics
+  correctAnswers: 0,
+  wrongAnswers: 0,
 };
 
 const gameSlice = createSlice({
@@ -40,16 +44,27 @@ const gameSlice = createSlice({
       state.answerRevealed = action.payload;
     },
 
+    // Correct answer
+    incrementCorrect: (state) => {
+      state.correctAnswers += 1;
+    },
+
+    // Wrong answer
+    incrementWrong: (state) => {
+      state.wrongAnswers += 1;
+    },
+
     resetGame: () => initialState,
   },
 });
-
 export const {
   setGame,
   setGameStatus,
   setCurrentQuestionIndex,
   setQuestionStartedAt,
   setAnswerRevealed,
+  incrementCorrect,
+  incrementWrong,
   resetGame,
 } = gameSlice.actions;
 
