@@ -50,6 +50,10 @@ function JoinGame() {
                 id: "player_" + Date.now(),
                 nickname: playerName,
                 score: 0,
+                correctCount: 0,
+                wrongCount: 0,
+                answered: false,
+                correct: null,
             };
 
             // Add player to Firebase

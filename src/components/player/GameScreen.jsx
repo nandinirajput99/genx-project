@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
@@ -15,6 +15,11 @@ function GameScreen() {
     const [selectedAnswer, setSelectedAnswer] = useState("");
     const [submitted, setSubmitted] = useState(false);
     const [isCorrect, setIsCorrect] = useState(null);
+    const [timeLeft, setTimeLeft] = useState(20);
+    const [musicEnabled, setMusicEnabled] = useState(true);
+
+    const audioCtxRef = useRef(null);
+    const musicTimerRef = useRef(null);
 
     const pin = game?.pin || localStorage.getItem("gamePin");
 
@@ -35,7 +40,103 @@ function GameScreen() {
         ) ||
         players?.[players.length - 1];
 
-    // Firebase se live game data
+    // Background Tune (Gentle, non-distracting ambient lo-fi arpeggios)
+    useEffect(() => {
+        if (!musicEnabled) {
+            if (musicTimerRef.current) {
+                clearInterval(musicTimerRef.current);
+                musicTimerRef.current = null;
+            }
+            if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+                audioCtxRef.current.suspend().catch(() => {});
+            }
+            return;
+        }
+
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new AudioCtx();
+            }
+
+            const ctx = audioCtxRef.current;
+            if (ctx.state === "suspended") {
+                ctx.resume().catch(() => {});
+            }
+
+            // Gentle ambient lo-fi pentatonic melody (warm, soothing and low volume)
+            const melody = [
+                261.63, 329.63, 392.00, 523.25, // C4, E4, G4, C5
+                440.00, 392.00, 329.63, 293.66, // A4, G4, E4, D4
+            ];
+            let noteIndex = 0;
+
+            const playSoftNote = () => {
+                if (!ctx || ctx.state !== "running") return;
+                try {
+                    const freq = melody[noteIndex % melody.length];
+                    noteIndex++;
+
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    const filter = ctx.createBiquadFilter();
+
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+                    filter.type = "lowpass";
+                    filter.frequency.setValueAtTime(750, ctx.currentTime);
+
+                    gain.gain.setValueAtTime(0, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.45);
+                } catch {
+                    // Ignore audio playback exceptions
+                }
+            };
+
+            musicTimerRef.current = setInterval(playSoftNote, 520);
+        } catch (err) {
+            console.log("Background music error:", err);
+        }
+
+        return () => {
+            if (musicTimerRef.current) {
+                clearInterval(musicTimerRef.current);
+                musicTimerRef.current = null;
+            }
+        };
+    }, [musicEnabled]);
+
+    // Handle initial browser gesture for audio
+    useEffect(() => {
+        const resumeAudio = () => {
+            if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+                audioCtxRef.current.resume().catch(() => {});
+            }
+        };
+        window.addEventListener("click", resumeAudio, { once: true });
+        window.addEventListener("touchstart", resumeAudio, { once: true });
+        return () => {
+            window.removeEventListener("click", resumeAudio);
+            window.removeEventListener("touchstart", resumeAudio);
+            if (musicTimerRef.current) clearInterval(musicTimerRef.current);
+            if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+                audioCtxRef.current.close().catch(() => {});
+            }
+        };
+    }, []);
+
+    // Firebase live game listener
     useEffect(() => {
         if (!pin) {
             navigate("/");
@@ -57,7 +158,34 @@ function GameScreen() {
         return () => unsubscribe();
     }, [pin, navigate]);
 
-    // Player ka answer Firebase se sync
+    // Current question
+    const currentQuestionIndex =
+        gameData?.currentQuestionIndex ??
+        gameData?.currentQuestion ??
+        0;
+
+    const question =
+        gameData?.questions?.[currentQuestionIndex];
+
+    // Auto-synchronized countdown timer for user
+    useEffect(() => {
+        if (!gameData || gameData.status !== "playing") return;
+
+        const duration = gameData.questionDuration || question?.timer || 20;
+        const startedAt = gameData.questionStartedAt || Date.now();
+
+        const updateTimer = () => {
+            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+            const remaining = Math.max(0, duration - elapsed);
+            setTimeLeft(remaining);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [gameData?.questionStartedAt, gameData?.questionDuration, gameData?.currentQuestionIndex, gameData?.status, question]);
+
+    // Player answer state sync with Firebase
     useEffect(() => {
         if (gameData?.players) {
             const me = gameData.players.find(
@@ -69,37 +197,49 @@ function GameScreen() {
             if (me) {
                 setSubmitted(!!me.answered);
                 setSelectedAnswer(me.answer || "");
+                if (me.correct !== undefined) {
+                    setIsCorrect(me.correct);
+                }
+            } else {
+                setSubmitted(false);
+                setSelectedAnswer("");
+                setIsCorrect(null);
             }
         }
     }, [
-        gameData,
+        gameData?.players,
+        gameData?.currentQuestionIndex,
         localPlayerId,
         localPlayerNickname,
     ]);
 
-    // Current question
-    const currentQuestionIndex =
-        gameData?.currentQuestionIndex ??
-        gameData?.currentQuestion ??
-        0;
-
-    const question =
-        gameData?.questions?.[currentQuestionIndex];
+    // Reset local selection when question changes
+    useEffect(() => {
+        setSelectedAnswer("");
+        setSubmitted(false);
+        setIsCorrect(null);
+    }, [gameData?.currentQuestionIndex]);
 
     // Answer select
     const handleAnswer = (answer) => {
-        if (submitted) {
+        if (submitted || timeLeft === 0) {
             return;
         }
 
         setSelectedAnswer(answer);
     };
 
-    // Answer submit
+    const correctOption =
+        typeof question?.correctAnswer === "number"
+            ? question?.options?.[question?.correctAnswer]
+            : question?.correctAnswer;
+
+    // Answer submit with speed-based scoring
     const submitAnswer = async () => {
         if (
             selectedAnswer === "" ||
             submitted ||
+            timeLeft === 0 ||
             !gameData?.players ||
             !question
         ) {
@@ -107,31 +247,35 @@ function GameScreen() {
         }
 
         try {
-            // Check correct / wrong
-            const answerIsCorrect =
-                selectedAnswer === question.correctAnswer;
-
+            const answerIsCorrect = selectedAnswer === correctOption;
             setIsCorrect(answerIsCorrect);
+
+            const duration = gameData.questionDuration || question.timer || 20;
+            // Faster answer = more points! (500 base + up to 500 speed bonus)
+            const speedBonus = Math.max(0, Math.round((timeLeft / duration) * 500));
+            const pointsEarned = answerIsCorrect ? 500 + speedBonus : 0;
 
             const gameRef = doc(db, "games", pin);
 
-            const updatedPlayers = gameData.players.map(
-                (player) => {
-                    if (
-                        player.id === currentPlayer?.id ||
-                        player.nickname ===
-                            currentPlayer?.nickname
-                    ) {
-                        return {
-                            ...player,
-                            answer: selectedAnswer,
-                            answered: true,
-                        };
-                    }
-
-                    return player;
+            const updatedPlayers = gameData.players.map((player) => {
+                if (
+                    player.id === currentPlayer?.id ||
+                    player.nickname === currentPlayer?.nickname
+                ) {
+                    return {
+                        ...player,
+                        answer: selectedAnswer,
+                        answered: true,
+                        correct: answerIsCorrect,
+                        timeRemaining: timeLeft,
+                        score: (player.score || 0) + pointsEarned,
+                        correctCount: (player.correctCount || 0) + (answerIsCorrect ? 1 : 0),
+                        wrongCount: (player.wrongCount || 0) + (answerIsCorrect ? 0 : 1),
+                    };
                 }
-            );
+
+                return player;
+            });
 
             await updateDoc(gameRef, {
                 players: updatedPlayers,
@@ -139,14 +283,23 @@ function GameScreen() {
 
             setSubmitted(true);
         } catch (error) {
-            console.log(
-                "Answer submit error:",
-                error
-            );
+            console.log("Answer submit error:", error);
         }
     };
+
+    const correctAnswersCount =
+        gameData?.players?.filter(
+            (p) => p.answered && (p.answer === correctOption || p.correct === true)
+        ).length || 0;
+
+    const wrongAnswersCount =
+        gameData?.players?.filter(
+            (p) => p.answered && (p.answer !== correctOption || p.correct === false)
+        ).length || 0;
+
+    // Loading state
     if (!gameData) {
-          return (
+        return (
             <div className="min-h-screen bg-[#0b071e] text-white flex items-center justify-center p-4 font-sans select-none">
                 <div className="flex flex-col items-center space-y-4">
                     <div className="w-16 h-16 rounded-full bg-linear-to-b from-indigo-600 to-purple-900 border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(168,85,247,0.5)] animate-pulse">
@@ -161,7 +314,7 @@ function GameScreen() {
         );
     }
 
-    // Game finished
+    // Game finished: Display Podium with overall stats
     if (gameData.status === "finished") {
         const sorted = [
             ...(gameData.players || []),
@@ -171,17 +324,30 @@ function GameScreen() {
                 (a.score || 0)
         );
 
+        const totalCorrect = sorted.reduce(
+            (acc, p) => acc + (p.correctCount || (p.correct ? 1 : 0)),
+            0
+        );
+        const totalWrong = sorted.reduce(
+            (acc, p) => acc + (p.wrongCount || (p.answered && !p.correct ? 1 : 0)),
+            0
+        );
+
         return (
             <Podium
                 winners={sorted.map((p) => ({
                     name: p.nickname,
                     score: p.score || 0,
+                    correctCount: p.correctCount,
+                    wrongCount: p.wrongCount,
                 }))}
+                totalCorrect={totalCorrect}
+                totalWrong={totalWrong}
             />
         );
     }
 
-    // Question nahi mili
+    // Question not found
     if (!question) {
         return (
             <div className="min-h-screen bg-[#0b071e] text-white flex items-center justify-center p-4 font-sans select-none">
@@ -239,15 +405,27 @@ function GameScreen() {
                     <span className="absolute -top-1 -right-1 text-xs sm:text-sm">💡</span>
                 </div>
 
-                {/* Language Selector */}
-                <button
-                    type="button"
-                    className="flex items-center space-x-1.5 bg-[#1a1438]/80 border border-purple-500/30 text-purple-200 text-xs sm:text-sm px-3.5 py-1.5 rounded-full backdrop-blur-md hover:bg-purple-900/40 transition cursor-pointer shadow-lg"
-                >
-                    <span>🌐</span>
-                    <span className="font-medium">English</span>
-                    <span className="text-[10px]">▼</span>
-                </button>
+                {/* Right Controls: Background Music Toggle & Language Selector */}
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setMusicEnabled((prev) => !prev)}
+                        className="flex items-center space-x-1.5 bg-[#1a1438]/80 border border-purple-500/30 text-purple-200 text-xs sm:text-sm px-3 py-1.5 rounded-full backdrop-blur-md hover:bg-purple-900/40 transition cursor-pointer shadow-lg"
+                        title="Background Game Music Toggle"
+                    >
+                        <span>{musicEnabled ? "🔊" : "🔇"}</span>
+                        <span className="font-medium hidden sm:inline">{musicEnabled ? "Tune ON" : "Tune OFF"}</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        className="flex items-center space-x-1.5 bg-[#1a1438]/80 border border-purple-500/30 text-purple-200 text-xs sm:text-sm px-3.5 py-1.5 rounded-full backdrop-blur-md hover:bg-purple-900/40 transition cursor-pointer shadow-lg"
+                    >
+                        <span>🌐</span>
+                        <span className="font-medium">English</span>
+                        <span className="text-[10px]">▼</span>
+                    </button>
+                </div>
             </div>
 
             {/* Main Glassmorphism Question Card */}
@@ -255,8 +433,10 @@ function GameScreen() {
 
                 {/* Central Top Timer Ring Emblem */}
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-                    <div className="w-15 h-15 rounded-full bg-[#130a2e] border-4 border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)] flex flex-col items-center justify-center text-center">
-                        <span className="text-base font-black text-white leading-none">15</span>
+                    <div className={`w-15 h-15 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse" : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"} flex flex-col items-center justify-center text-center transition-all`}>
+                        <span className={`text-base font-black leading-none ${timeLeft <= 5 ? "text-rose-400" : "text-white"}`}>
+                            {timeLeft}
+                        </span>
                         <span className="text-[9px] font-bold text-purple-300 uppercase tracking-tighter">sec</span>
                     </div>
                 </div>
@@ -302,11 +482,11 @@ function GameScreen() {
                                 <button
                                     key={option}
                                     onClick={() => handleAnswer(option)}
-                                    disabled={submitted}
+                                    disabled={submitted || timeLeft === 0}
                                     className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all duration-200 text-left cursor-pointer border ${isSelected
                                             ? "bg-emerald-950/80 border-2 border-emerald-400 text-white shadow-[0_0_20px_rgba(52,211,153,0.4)]"
                                             : "bg-[#1b113e] border-purple-800/60 hover:border-purple-500/80 text-white"
-                                        } ${submitted ? "cursor-not-allowed opacity-90" : ""}`}
+                                        } ${submitted || timeLeft === 0 ? "cursor-not-allowed opacity-90" : ""}`}
                                 >
                                     <div className="flex items-center space-x-3.5">
                                         <div
@@ -336,12 +516,33 @@ function GameScreen() {
                     {/* Submit Button */}
                     <button
                         onClick={submitAnswer}
-                        disabled={selectedAnswer === "" || submitted}
+                        disabled={selectedAnswer === "" || submitted || timeLeft === 0}
                         className="w-full mt-4 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
                     >
                         <span>🚀</span>
-                        <span>{submitted ? "ANSWER SUBMITTED" : "SUBMIT ANSWER"}</span>
+                        <span>{submitted ? "ANSWER SUBMITTED" : timeLeft === 0 ? "TIME EXPIRED" : "SUBMIT ANSWER"}</span>
                     </button>
+
+                    {/* Live Correct vs Wrong Feedback for current user */}
+                    {submitted && isCorrect !== null && (
+                        <div className={`mt-3 text-center text-xs sm:text-sm font-extrabold py-2 px-4 rounded-xl border ${isCorrect ? "text-emerald-300 bg-emerald-950/70 border-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]" : "text-rose-300 bg-rose-950/70 border-rose-400/50 shadow-[0_0_15px_rgba(244,63,94,0.3)]"}`}>
+                            {isCorrect ? "✅ Great job! Your answer is Correct! 🎉" : "❌ Oops! Your answer is Wrong."}
+                        </div>
+                    )}
+
+                    {/* How many players answered correct vs wrong */}
+                    {(submitted || gameData.answerRevealed || timeLeft === 0) && (
+                        <div className="mt-3 flex items-center justify-center gap-3">
+                            <div className="flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/40 px-3.5 py-1 rounded-full text-xs font-bold text-emerald-300 shadow-sm">
+                                <span>✅</span>
+                                <span>{correctAnswersCount} Correct</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-rose-950/70 border border-rose-500/40 px-3.5 py-1 rounded-full text-xs font-bold text-rose-300 shadow-sm">
+                                <span>❌</span>
+                                <span>{wrongAnswersCount} Wrong</span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Waiting Banner */}
                     {submitted && (

@@ -205,6 +205,11 @@ export default function HostLobby({ quizId }) {
         gameRef,
         {
           status: "playing",
+          currentQuestionIndex: 0,
+          questionStartedAt: Date.now(),
+          questionDuration: 20,
+          timerActive: true,
+          answerRevealed: false,
         },
         {
           merge: true,
