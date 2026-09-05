@@ -89,7 +89,11 @@ function JoinGame() {
                 })
             );
 
-            // Persist session locally
+            // Persist session locally (sessionStorage for per-tab isolation, localStorage as fallback)
+            sessionStorage.setItem("gamePin", gamePin);
+            sessionStorage.setItem("currentPlayerId", playerData.id);
+            sessionStorage.setItem("currentPlayerNickname", playerName);
+
             localStorage.setItem("gamePin", gamePin);
             localStorage.setItem("currentPlayerId", playerData.id);
             localStorage.setItem("currentPlayerNickname", playerName);

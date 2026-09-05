@@ -85,9 +85,12 @@ export default function LiveHost() {
         return player;
       }
 
+      const targetStr = (targetOption || "").toString().trim().toLowerCase();
+      const playerAnsStr = (player.answer || "").toString().trim().toLowerCase();
+
       // If player answered during round but score was pending
-      if (player.answered) {
-        const isCorrect = player.answer === targetOption;
+      if (player.answered && player.answer) {
+        const isCorrect = playerAnsStr === targetStr;
         const availableTime = player.timeRemaining !== undefined ? player.timeRemaining : remainingTime;
         const speedBonus = Math.max(0, Math.round((availableTime / timerLimit) * 500));
         const pointsToAdd = isCorrect ? 500 + speedBonus : 0;
@@ -220,7 +223,20 @@ export default function LiveHost() {
         players: resetPlayers,
       });
     } else {
-      await updateDoc(doc(db, "games", activePin), { status: "finished" });
+      // Quiz finished! Score any pending answers and write final results to Firestore
+      const gameRef = doc(db, "games", activePin);
+      const freshSnap = await getDoc(gameRef);
+      const currentPlayers = (freshSnap.exists() && freshSnap.data().players) || players;
+
+      let finalPlayers = currentPlayers;
+      if (!game.answerRevealed) {
+        finalPlayers = calculateScoredPlayers(currentPlayers, correctOption, questionDuration, timeLeft);
+      }
+
+      await updateDoc(gameRef, {
+        status: "finished",
+        players: finalPlayers,
+      });
       setStatus("finished");
     }
   };
@@ -358,8 +374,15 @@ export default function LiveHost() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {currentQ.options?.map((opt, idx) => {
-            const isCorrect = idx === currentQ.correctAnswer || opt === correctOption;
+            const isCorrect =
+              idx === currentQ.correctAnswer ||
+              (opt && (opt || "").toString().trim().toLowerCase() === (correctOption || "").toString().trim().toLowerCase());
             const isRevealed = game.answerRevealed;
+
+            const optStr = (opt || "").toString().trim().toLowerCase();
+            const voteCount = players.filter(
+              (p) => p.answered && (p.answer || "").toString().trim().toLowerCase() === optStr
+            ).length;
 
             let cardStyle = "bg-indigo-600 hover:bg-indigo-500 text-white";
             if (isRevealed && isCorrect) {
@@ -379,7 +402,12 @@ export default function LiveHost() {
                   </span>
                   <span>{opt}</span>
                 </div>
-                {isRevealed && isCorrect && <span>✓ Correct</span>}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-black/20 px-2.5 py-1 rounded-full font-bold">
+                    {voteCount} {voteCount === 1 ? "player" : "players"}
+                  </span>
+                  {isRevealed && isCorrect && <span className="text-sm">✓</span>}
+                </div>
               </div>
             );
           })}
@@ -411,6 +439,77 @@ export default function LiveHost() {
         >
           Restart Timer ⏱️
         </button>
+      </div>
+
+      {/* Live Player Responses Box (Answers visible to Host) */}
+      <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl mb-6">
+        <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">👥</span>
+            <h4 className="text-base sm:text-lg font-black text-slate-800">
+              Live Player Answers
+            </h4>
+          </div>
+          <span className="text-xs bg-purple-100 text-purple-800 font-bold px-3 py-1 rounded-full">
+            {totalAnsweredCount} / {players.length} Answered
+          </span>
+        </div>
+
+        {players.length === 0 ? (
+          <p className="text-center text-slate-400 text-sm italic py-2">No players joined yet</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {players.map((p, idx) => {
+              const hasAnswered = p.answered;
+              const isRevealed = game.answerRevealed;
+              const correctTargetStr = (correctOption || "").toString().trim().toLowerCase();
+              const playerAnsStr = (p.answer || "").toString().trim().toLowerCase();
+              const isCorrect = p.correct === true || (playerAnsStr && playerAnsStr === correctTargetStr);
+
+              let statusBg = "bg-white border-slate-200 text-slate-600";
+              let statusText = "⏳ Thinking...";
+
+              if (hasAnswered && !isRevealed) {
+                statusBg = "bg-indigo-50 border-indigo-200 text-indigo-700 font-bold";
+                statusText = "⚡ Answer Submitted";
+              } else if (hasAnswered && isRevealed) {
+                if (isCorrect) {
+                  statusBg = "bg-emerald-50 border-emerald-300 text-emerald-800 font-extrabold shadow-xs";
+                  statusText = `✅ ${p.answer}`;
+                } else {
+                  statusBg = "bg-rose-50 border-rose-300 text-rose-800 font-extrabold shadow-xs";
+                  statusText = `❌ ${p.answer || "Wrong"}`;
+                }
+              } else if (!hasAnswered && isRevealed) {
+                statusBg = "bg-rose-50/60 border-rose-200 text-rose-500";
+                statusText = "⏱️ Timed Out";
+              }
+
+              return (
+                <div
+                  key={p.id || idx}
+                  className={`p-3 rounded-xl border flex flex-col justify-between transition-all ${statusBg}`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-black text-sm text-slate-900 truncate">
+                      {p.nickname}
+                    </span>
+                    <span className="text-xs font-black text-indigo-600">
+                      {p.score || 0} pts
+                    </span>
+                  </div>
+
+                  <div className="text-xs flex items-center justify-between mt-1 pt-1.5 border-t border-black/5">
+                    <span className="truncate font-semibold">{statusText}</span>
+                    {hasAnswered && isRevealed && isCorrect && (
+                      <span className="text-[11px] font-black text-emerald-600">+pts</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">

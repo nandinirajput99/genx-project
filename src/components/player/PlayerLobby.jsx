@@ -10,7 +10,7 @@ function PlayerLobby() {
   const dispatch = useDispatch();
   const game = useSelector((state) => state.game);
   const [gameData, setGameData] = useState(null);
-  const pin = game?.pin || localStorage.getItem("gamePin");
+  const pin = sessionStorage.getItem("gamePin") || game?.pin || localStorage.getItem("gamePin");
 
   useEffect(() => {
     if (!pin) {

@@ -21,12 +21,18 @@ function GameScreen() {
     const audioCtxRef = useRef(null);
     const musicTimerRef = useRef(null);
 
-    const pin = game?.pin || localStorage.getItem("gamePin");
+    const pin =
+        sessionStorage.getItem("gamePin") ||
+        game?.pin ||
+        localStorage.getItem("gamePin");
 
-    const localPlayerId = localStorage.getItem("currentPlayerId");
-    const localPlayerNickname = localStorage.getItem(
-        "currentPlayerNickname"
-    );
+    const localPlayerId =
+        sessionStorage.getItem("currentPlayerId") ||
+        localStorage.getItem("currentPlayerId");
+
+    const localPlayerNickname =
+        sessionStorage.getItem("currentPlayerNickname") ||
+        localStorage.getItem("currentPlayerNickname");
 
     const currentPlayer =
         gameData?.players?.find(
@@ -263,22 +269,21 @@ function GameScreen() {
     // Player answer state sync with Firebase
     useEffect(() => {
         if (gameData?.players) {
+            const myNick = (localPlayerNickname || "").trim().toLowerCase();
             const me = gameData.players.find(
                 (p) =>
-                    p.id === localPlayerId ||
-                    p.nickname === localPlayerNickname
+                    (localPlayerId && p.id === localPlayerId) ||
+                    (myNick && p.nickname?.trim().toLowerCase() === myNick)
             );
 
-            if (me) {
-                setSubmitted(!!me.answered);
-                setSelectedAnswer(me.answer || "");
+            if (me && me.answered) {
+                setSubmitted(true);
+                if (me.answer) {
+                    setSelectedAnswer(me.answer);
+                }
                 if (me.correct !== undefined) {
                     setIsCorrect(me.correct);
                 }
-            } else {
-                setSubmitted(false);
-                setSelectedAnswer("");
-                setIsCorrect(null);
             }
         }
     }, [
@@ -311,10 +316,11 @@ function GameScreen() {
             : question?.correctAnswer;
 
     // Answer submit with speed-based scoring
-    const submitAnswer = async () => {
+    const submitAnswer = async (answerOverride) => {
         resumeAudio();
+        const answerToSubmit = answerOverride || selectedAnswer;
         if (
-            selectedAnswer === "" ||
+            !answerToSubmit ||
             submitted ||
             timeLeft === 0 ||
             !pin ||
@@ -324,7 +330,17 @@ function GameScreen() {
         }
 
         try {
-            const answerIsCorrect = selectedAnswer === correctOption;
+            setSubmitted(true);
+
+            const targetCorrect =
+                typeof question?.correctAnswer === "number"
+                    ? question?.options?.[question?.correctAnswer]
+                    : (question?.correctAnswer ?? (typeof question?.correctIndex === "number" ? question?.options?.[question?.correctIndex] : ""));
+
+            const targetStr = (targetCorrect || "").toString().trim().toLowerCase();
+            const answerStr = (answerToSubmit || "").toString().trim().toLowerCase();
+            const answerIsCorrect = answerStr === targetStr;
+
             setIsCorrect(answerIsCorrect);
 
             const duration = gameData?.questionDuration || question?.timer || 20;
@@ -332,18 +348,20 @@ function GameScreen() {
             const speedBonus = Math.max(0, Math.round((timeLeft / duration) * 500));
             const pointsEarned = answerIsCorrect ? 500 + speedBonus : 0;
 
+            const myId = localPlayerId;
+            const myNick = (localPlayerNickname || "").trim().toLowerCase();
+
             const gameRef = doc(db, "games", pin);
             const freshSnap = await getDoc(gameRef);
             const currentPlayers = (freshSnap.exists() && freshSnap.data().players) || gameData?.players || [];
 
             const updatedPlayers = currentPlayers.map((player) => {
-                if (
-                    player.id === currentPlayer?.id ||
-                    (currentPlayer?.nickname && player.nickname === currentPlayer.nickname)
-                ) {
+                const isMe = (myId && player.id === myId) ||
+                             (myNick && player.nickname?.trim().toLowerCase() === myNick);
+                if (isMe) {
                     return {
                         ...player,
-                        answer: selectedAnswer,
+                        answer: answerToSubmit,
                         answered: true,
                         correct: answerIsCorrect,
                         timeRemaining: timeLeft,
@@ -360,10 +378,9 @@ function GameScreen() {
             await updateDoc(gameRef, {
                 players: updatedPlayers,
             });
-
-            setSubmitted(true);
         } catch (error) {
-            console.log("Answer submit error:", error);
+            console.error("Answer submit error:", error);
+            setSubmitted(false);
         }
     };
 
@@ -417,6 +434,7 @@ function GameScreen() {
             <Podium
                 winners={sorted.map((p) => ({
                     name: p.nickname,
+                    nickname: p.nickname,
                     score: p.score || 0,
                     correctCount: p.correctCount,
                     wrongCount: p.wrongCount,
