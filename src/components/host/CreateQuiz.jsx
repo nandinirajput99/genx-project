@@ -130,17 +130,25 @@ function CreateQuiz() {
     if (questions.length === 0) return;
 
     const formattedQuestions = questions.map((q) => {
-      const options = [
+      const rawOptions = [
         ...q.incorrectAnswers,
         q.correctAnswer,
       ];
+
+      // Shuffle options randomly (Fisher-Yates style)
+      const shuffledOptions = [...rawOptions];
+      for (let i = shuffledOptions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+      }
 
       return {
         id: q.id,
         question: q.question.text,
         questionText: q.question.text,
-        options: options,
-        correctAnswer: options.length - 1,
+        options: shuffledOptions,
+        correctAnswer: q.correctAnswer,
+        correctIndex: shuffledOptions.indexOf(q.correctAnswer),
       };
     });
 

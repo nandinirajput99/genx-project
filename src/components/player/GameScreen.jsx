@@ -51,7 +51,7 @@ function GameScreen() {
         }
     };
 
-    // Background Tune (Calm, gentle, non-distracting ambient lo-fi melody)
+    // Background Tune (Calm, gentle, non-distracting ambient lo-fi game soundtrack)
     useEffect(() => {
         if (!musicEnabled) {
             if (musicTimerRef.current) {
@@ -77,9 +77,24 @@ function GameScreen() {
                 ctx.resume().catch(() => {});
             }
 
-            // Peaceful, non-distracting ambient pentatonic melody (C-E-G-A-C-A-G-E)
+            // Peaceful, non-distracting ambient melody (C -> G -> Am -> F)
             const melody = [
-                261.63, 329.63, 392.00, 440.00, 523.25, 440.00, 392.00, 329.63,
+                { f: 261.63, b: 130.81 }, // C4, C3 bass
+                { f: 329.63, b: 130.81 }, // E4
+                { f: 392.00, b: 130.81 }, // G4
+                { f: 523.25, b: 130.81 }, // C5
+                { f: 196.00, b: 98.00 },  // G3, G2 bass
+                { f: 246.94, b: 98.00 },  // B3
+                { f: 293.66, b: 98.00 },  // D4
+                { f: 392.00, b: 98.00 },  // G4
+                { f: 220.00, b: 110.00 }, // A3, A2 bass
+                { f: 261.63, b: 110.00 }, // C4
+                { f: 329.63, b: 110.00 }, // E4
+                { f: 440.00, b: 110.00 }, // A4
+                { f: 174.61, b: 87.31 },  // F3, F2 bass
+                { f: 220.00, b: 87.31 },  // A3
+                { f: 261.63, b: 87.31 },  // C4
+                { f: 349.23, b: 87.31 },  // F4
             ];
             let noteIndex = 0;
 
@@ -92,37 +107,62 @@ function GameScreen() {
                 if (ctx.state !== "running") return;
 
                 try {
-                    const freq = melody[noteIndex % melody.length];
+                    const { f, b } = melody[noteIndex % melody.length];
                     noteIndex++;
+                    const now = ctx.currentTime;
 
+                    // 1. Soft melodic chime tone
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
                     const filter = ctx.createBiquadFilter();
 
                     osc.type = "sine";
-                    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                    osc.frequency.setValueAtTime(f, now);
 
-                    // Warm lowpass filter to remove harshness & make it soothing
+                    // Lowpass filter keeps sound warm & relaxing
                     filter.type = "lowpass";
-                    filter.frequency.setValueAtTime(550, ctx.currentTime);
+                    filter.frequency.setValueAtTime(650, now);
 
-                    // Soft ambient envelope (quiet gain ~0.025)
-                    gain.gain.setValueAtTime(0, ctx.currentTime);
-                    gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 0.08);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(0.075, now + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
 
                     osc.connect(filter);
                     filter.connect(gain);
                     gain.connect(ctx.destination);
 
-                    osc.start(ctx.currentTime);
-                    osc.stop(ctx.currentTime + 0.5);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+
+                    // 2. Soft bass warmth (plays on alternate beats)
+                    if (noteIndex % 2 === 0) {
+                        const oscBass = ctx.createOscillator();
+                        const gainBass = ctx.createGain();
+                        const filterBass = ctx.createBiquadFilter();
+
+                        oscBass.type = "triangle";
+                        oscBass.frequency.setValueAtTime(b, now);
+
+                        filterBass.type = "lowpass";
+                        filterBass.frequency.setValueAtTime(250, now);
+
+                        gainBass.gain.setValueAtTime(0, now);
+                        gainBass.gain.linearRampToValueAtTime(0.055, now + 0.05);
+                        gainBass.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+
+                        oscBass.connect(filterBass);
+                        filterBass.connect(gainBass);
+                        gainBass.connect(ctx.destination);
+
+                        oscBass.start(now);
+                        oscBass.stop(now + 0.6);
+                    }
                 } catch {
                     // Ignore audio playback exceptions
                 }
             };
 
-            musicTimerRef.current = setInterval(playSoftNote, 560);
+            musicTimerRef.current = setInterval(playSoftNote, 340);
         } catch (err) {
             console.log("Background music error:", err);
         }
@@ -135,7 +175,7 @@ function GameScreen() {
         };
     }, [musicEnabled]);
 
-    // Handle user gestures anywhere on the screen to unlock Web Audio
+    // Handle user gestures anywhere on the screen to unlock Web Audio immediately
     useEffect(() => {
         const handleGesture = () => {
             resumeAudio();
@@ -145,12 +185,19 @@ function GameScreen() {
         window.addEventListener("touchstart", handleGesture);
         window.addEventListener("click", handleGesture);
         window.addEventListener("keydown", handleGesture);
+        window.addEventListener("mousemove", handleGesture, { once: true });
+        window.addEventListener("focus", handleGesture);
+
+        // Attempt initial resume
+        resumeAudio();
 
         return () => {
             window.removeEventListener("pointerdown", handleGesture);
             window.removeEventListener("touchstart", handleGesture);
             window.removeEventListener("click", handleGesture);
             window.removeEventListener("keydown", handleGesture);
+            window.removeEventListener("mousemove", handleGesture);
+            window.removeEventListener("focus", handleGesture);
             if (musicTimerRef.current) clearInterval(musicTimerRef.current);
             if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
                 audioCtxRef.current.close().catch(() => {});
@@ -188,6 +235,20 @@ function GameScreen() {
 
     const question =
         gameData?.questions?.[currentQuestionIndex];
+
+    // Shuffled display options per question so answers are never in the same place
+    const [displayOptions, setDisplayOptions] = useState([]);
+
+    useEffect(() => {
+        if (question?.options) {
+            const shuffled = [...question.options];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            setDisplayOptions(shuffled);
+        }
+    }, [currentQuestionIndex, question?.question, question?.options]);
 
     // Auto-synchronized countdown timer for user
     useEffect(() => {
@@ -499,9 +560,9 @@ function GameScreen() {
                         </div>
                     </div>
 
-                    {/* Options List */}
+                    {/* Shuffled Options List */}
                     <div className="space-y-3 my-6">
-                        {question.options?.map((option, idx) => {
+                        {(displayOptions.length > 0 ? displayOptions : question.options)?.map((option, idx) => {
                             const letter = optionLetters[idx % optionLetters.length];
                             const isSelected = selectedAnswer === option;
 
