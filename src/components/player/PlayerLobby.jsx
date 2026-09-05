@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
-import { setPlayers } from "../../redux/playersSlice";
-
 function PlayerLobby() {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   const game = useSelector((state) => state.game);
+  const players = useSelector((state) => state.players.players);
   const [gameData, setGameData] = useState(null);
-  const pin = sessionStorage.getItem("gamePin") || game?.pin || localStorage.getItem("gamePin");
+  const pin = game?.pin || localStorage.getItem("gamePin");
 
   useEffect(() => {
     if (!pin) {
@@ -29,14 +27,11 @@ function PlayerLobby() {
         }
 
         const data = snapshot.data();
+
         setGameData(data);
 
-        if (data.players) {
-          dispatch(setPlayers(data.players));
-        }
-
-        // Host has started the game or finished it
-        if (data.status === "playing" || data.status === "finished") {
+        // Host has started the game
+        if (data.status === "playing") {
           navigate("/player/game");
         }
       },
@@ -46,7 +41,7 @@ function PlayerLobby() {
     );
 
     return () => unsubscribe();
-  }, [pin, navigate, dispatch]);
+  }, [pin, navigate]);
 
   if (!gameData) {
     return (
@@ -68,8 +63,8 @@ function PlayerLobby() {
   return (
     <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-center p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
       {/* Background ambient lighting glows */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[380px] bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[280px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-380px bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-280px bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
       {/* Floating 3D Question mark decorative tiles (Desktop) */}
       <div className="hidden lg:flex absolute left-12 top-1/4 w-14 h-14 bg-purple-900/40 border border-purple-500/40 rounded-2xl items-center justify-center text-purple-300 text-2xl font-black shadow-[0_0_20px_rgba(168,85,247,0.3)] -rotate-12 animate-pulse">
@@ -129,7 +124,7 @@ function PlayerLobby() {
 
         {/* Left Side Floating Feature Badge (Desktop/Tablet) */}
         <div className="hidden md:flex flex-col space-y-4 absolute left-0 top-1/2 -translate-y-1/2 z-10">
-          <div className="bg-[#191038]/90 border border-purple-500/40 px-4 py-3 rounded-2xl backdrop-blur-md shadow-xl flex flex-col items-center text-center max-w-[140px]">
+          <div className="bg-[#191038]/90 border border-purple-500/40 px-4 py-3 rounded-2xl backdrop-blur-md shadow-xl flex flex-col items-center text-center max-w-140px">
             <span className="text-2xl mb-1 animate-pulse">⚡</span>
             <span className="text-xs font-bold text-amber-300">Waiting for Host...</span>
           </div>
@@ -137,7 +132,7 @@ function PlayerLobby() {
 
         {/* Right Side Floating Feature Badge (Desktop/Tablet) */}
         <div className="hidden md:flex flex-col space-y-4 absolute right-0 top-1/2 -translate-y-1/2 z-10">
-          <div className="bg-[#191038]/90 border border-purple-500/40 px-4 py-3 rounded-2xl backdrop-blur-md shadow-xl flex flex-col items-center text-center max-w-[140px]">
+          <div className="bg-[#191038]/90 border border-purple-500/40 px-4 py-3 rounded-2xl backdrop-blur-md shadow-xl flex flex-col items-center text-center max-w-140px">
             <span className="text-2xl mb-1">🎮</span>
             <span className="text-xs font-bold text-purple-200">The game will start automatically!</span>
           </div>
@@ -148,7 +143,7 @@ function PlayerLobby() {
 
           {/* Top Golden Trophy Badge Emblem */}
           <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full bg-linear-to-b from-amber-300 via-yellow-500 to-amber-600 border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center text-2xl sm:text-3xl relative group">
+            <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-linear-to-b from-amber-300 via-yellow-500 to-amber-600 border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center text-2xl sm:text-3xl relative group">
               🏆
             </div>
           </div>
@@ -159,9 +154,9 @@ function PlayerLobby() {
             {/* Game PIN Box */}
             <div className="flex flex-col items-center justify-center mb-6">
               <div className="flex items-center space-x-3 text-purple-300/80 text-xs font-semibold tracking-widest uppercase mb-2">
-                <span className="w-6 h-[2px] bg-linear-to-r from-transparent to-purple-400/60"></span>
+                <span className="w-6 h-2px bg-linear-to-r from-transparent to-purple-400/60"></span>
                 <span>Game PIN</span>
-                <span className="w-6 h-[2px] bg-linear-to-l from-transparent to-purple-400/60"></span>
+                <span className="w-6 h-2px bg-linear-to-l from-transparent to-purple-400/60"></span>
               </div>
 
               <div className="w-full bg-[#1b113e] border-2 border-purple-500/60 rounded-2xl py-4 px-6 text-center shadow-[0_0_30px_rgba(168,85,247,0.3)] relative overflow-hidden group">
@@ -186,7 +181,7 @@ function PlayerLobby() {
             </div>
 
             {/* Players List */}
-            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
               {gameData.players?.map((player, idx) => {
                 const avatar = avatars[idx % avatars.length];
                 return (
@@ -204,7 +199,7 @@ function PlayerLobby() {
                     </div>
 
                     <div className="flex items-center space-x-2 text-xs sm:text-sm font-semibold text-purple-200">
-                      <span>Score: <strong className="text-amber-300 font-extrabold">{player.score || 0}</strong></span>
+                      <span>Score: <strong className="text-amber-300 font-extrabold">{player.score}</strong></span>
                       <span className="text-amber-400">🏆</span>
                     </div>
                   </div>
@@ -226,8 +221,8 @@ function PlayerLobby() {
             </div>
 
           </div>
-        </div>
-      </div>
+    </div>
+    </div>
     </div>
   );
 }

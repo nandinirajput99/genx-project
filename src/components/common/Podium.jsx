@@ -1,8 +1,4 @@
 import React, { useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { resetGame } from "../../redux/gameSlice";
-import { clearPlayers } from "../../redux/playersSlice";
 
 // Confetti Particle Canvas Component
 const ConfettiCanvas = () => {
@@ -71,9 +67,6 @@ const ConfettiCanvas = () => {
 };
 
 function Podium({ winners = [], totalCorrect, totalWrong }) {
-    const navigate = useNavigate();
-    const dispatch = useDispatch();
-
     const displayPlayers = winners.length > 0 ? winners : [
         { nickname: "Champion Tom 👑", score: 5950 },
         { nickname: "Smart Ansh", score: 1600 },
@@ -90,9 +83,6 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
             if (!AudioContextClass) return;
             const ctx = new AudioContextClass();
-            if (ctx.state === "suspended") {
-                ctx.resume().catch(() => {});
-            }
             const now = ctx.currentTime;
 
             // 1. Joyful Fanfare Melody (Brass-style arpeggio & chords)
@@ -252,7 +242,7 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
                             <div className="text-xs font-bold text-yellow-300 mb-2">
                                 {second.score || 0} pts
                             </div>
-                            <div className="bg-gray-300 text-purple-900 w-24 sm:w-28 h-28 sm:h-32 rounded-t-xl flex items-start justify-center pt-2 font-bold text-2xl shadow-lg border-t-2 border-white/50">
+                            <div className="bg-gray-300 text-purple-900 w-22 sm:w-28 h-28 sm:h-32 rounded-t-xl flex items-start justify-center pt-2 font-bold text-2xl shadow-lg border-t-2 border-white/50">
                                 🥈
                             </div>
                         </div>
@@ -270,7 +260,7 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
                             <div className="text-xs sm:text-sm font-bold text-yellow-300 mb-2">
                                 {first.score || 0} pts
                             </div>
-                            <div className="bg-yellow-400 text-purple-900 w-28 sm:w-32 h-38 sm:h-44 rounded-t-xl flex items-start justify-center pt-2 font-bold text-3xl shadow-xl border-t-2 border-yellow-200">
+                            <div className="bg-yellow-400 text-purple-900 w-26 sm:w-32 h-38 sm:h-44 rounded-t-xl flex items-start justify-center pt-2 font-bold text-3xl shadow-xl border-t-2 border-yellow-200">
                                 🥇
                             </div>
                         </div>
@@ -288,7 +278,7 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
                             <div className="text-xs font-bold text-yellow-300 mb-2">
                                 {third.score || 0} pts
                             </div>
-                            <div className="bg-orange-400 text-purple-900 w-24 sm:w-28 h-20 sm:h-24 rounded-t-xl flex items-start justify-center pt-2 font-bold text-2xl shadow-lg border-t-2 border-white/40">
+                            <div className="bg-orange-400 text-purple-900 w-22 sm:w-28 h-20 sm:h-24 rounded-t-xl flex items-start justify-center pt-2 font-bold text-2xl shadow-lg border-t-2 border-white/40">
                                 🥉
                             </div>
                         </div>
@@ -415,18 +405,12 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
 
                 {/* 5. Navigation Home / Play Again Button */}
                 <div className="mt-8 flex justify-center gap-4">
-                    <button
-                        onClick={() => {
-                            dispatch(resetGame());
-                            dispatch(clearPlayers());
-                            localStorage.removeItem("gamePin");
-                            localStorage.removeItem("currentPlayerId");
-                            navigate("/game-options");
-                        }}
+                    <a
+                        href="/game-options"
                         className="bg-linear-to-r from-indigo-500 via-purple-600 to-indigo-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-purple-900/40 transition duration-200 text-sm sm:text-base cursor-pointer transform hover:-translate-y-0.5"
                     >
                         Play Another Game 🚀
-                    </button>
+                    </a>
                 </div>
 
             </div>

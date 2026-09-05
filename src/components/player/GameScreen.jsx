@@ -21,18 +21,12 @@ function GameScreen() {
     const audioCtxRef = useRef(null);
     const musicTimerRef = useRef(null);
 
-    const pin =
-        sessionStorage.getItem("gamePin") ||
-        game?.pin ||
-        localStorage.getItem("gamePin");
+    const pin = game?.pin || localStorage.getItem("gamePin");
 
-    const localPlayerId =
-        sessionStorage.getItem("currentPlayerId") ||
-        localStorage.getItem("currentPlayerId");
-
-    const localPlayerNickname =
-        sessionStorage.getItem("currentPlayerNickname") ||
-        localStorage.getItem("currentPlayerNickname");
+    const localPlayerId = localStorage.getItem("currentPlayerId");
+    const localPlayerNickname = localStorage.getItem(
+        "currentPlayerNickname"
+    );
 
     const currentPlayer =
         gameData?.players?.find(
@@ -74,7 +68,7 @@ function GameScreen() {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return;
 
-            if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+            if (!audioCtxRef.current) {
                 audioCtxRef.current = new AudioCtx();
             }
 
@@ -207,7 +201,6 @@ function GameScreen() {
             if (musicTimerRef.current) clearInterval(musicTimerRef.current);
             if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
                 audioCtxRef.current.close().catch(() => {});
-                audioCtxRef.current = null;
             }
         };
     }, []);
@@ -243,17 +236,26 @@ function GameScreen() {
     const question =
         gameData?.questions?.[currentQuestionIndex];
 
-    const gameStatus = gameData?.status;
-    const qDuration = gameData?.questionDuration || question?.timer || 20;
-    const qStartedAt = gameData?.questionStartedAt;
-    const currentQIdx = gameData?.currentQuestionIndex;
+    // Shuffled display options per question so answers are never in the same place
+    const [displayOptions, setDisplayOptions] = useState([]);
+
+    useEffect(() => {
+        if (question?.options) {
+            const shuffled = [...question.options];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            setDisplayOptions(shuffled);
+        }
+    }, [currentQuestionIndex, question?.question, question?.options]);
 
     // Auto-synchronized countdown timer for user
     useEffect(() => {
-        if (!gameData || gameStatus !== "playing") return;
+        if (!gameData || gameData.status !== "playing") return;
 
-        const duration = qDuration;
-        const startedAt = qStartedAt || Date.now();
+        const duration = gameData.questionDuration || question?.timer || 20;
+        const startedAt = gameData.questionStartedAt || Date.now();
 
         const updateTimer = () => {
             const elapsed = Math.floor((Date.now() - startedAt) / 1000);
@@ -264,26 +266,27 @@ function GameScreen() {
         updateTimer();
         const interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
-    }, [gameData, gameStatus, qDuration, qStartedAt, currentQIdx]);
+    }, [gameData?.questionStartedAt, gameData?.questionDuration, gameData?.currentQuestionIndex, gameData?.status, question]);
 
     // Player answer state sync with Firebase
     useEffect(() => {
         if (gameData?.players) {
-            const myNick = (localPlayerNickname || "").trim().toLowerCase();
             const me = gameData.players.find(
                 (p) =>
-                    (localPlayerId && p.id === localPlayerId) ||
-                    (myNick && p.nickname?.trim().toLowerCase() === myNick)
+                    p.id === localPlayerId ||
+                    p.nickname === localPlayerNickname
             );
 
-            if (me && me.answered) {
-                setSubmitted(true);
-                if (me.answer) {
-                    setSelectedAnswer(me.answer);
-                }
+            if (me) {
+                setSubmitted(!!me.answered);
+                setSelectedAnswer(me.answer || "");
                 if (me.correct !== undefined) {
                     setIsCorrect(me.correct);
                 }
+            } else {
+                setSubmitted(false);
+                setSelectedAnswer("");
+                setIsCorrect(null);
             }
         }
     }, [
@@ -316,59 +319,43 @@ function GameScreen() {
             : question?.correctAnswer;
 
     // Answer submit with speed-based scoring
-    const submitAnswer = async (answerOverride) => {
+    const submitAnswer = async () => {
         resumeAudio();
-        const answerToSubmit = answerOverride || selectedAnswer;
         if (
-            !answerToSubmit ||
+            selectedAnswer === "" ||
             submitted ||
             timeLeft === 0 ||
-            !pin ||
+            !gameData?.players ||
             !question
         ) {
             return;
         }
 
         try {
-            setSubmitted(true);
-
-            const targetCorrect =
-                typeof question?.correctAnswer === "number"
-                    ? question?.options?.[question?.correctAnswer]
-                    : (question?.correctAnswer ?? (typeof question?.correctIndex === "number" ? question?.options?.[question?.correctIndex] : ""));
-
-            const targetStr = (targetCorrect || "").toString().trim().toLowerCase();
-            const answerStr = (answerToSubmit || "").toString().trim().toLowerCase();
-            const answerIsCorrect = answerStr === targetStr;
-
+            const answerIsCorrect = selectedAnswer === correctOption;
             setIsCorrect(answerIsCorrect);
 
-            const duration = gameData?.questionDuration || question?.timer || 20;
+            const duration = gameData.questionDuration || question.timer || 20;
             // Faster answer = more points! (500 base + up to 500 speed bonus)
             const speedBonus = Math.max(0, Math.round((timeLeft / duration) * 500));
             const pointsEarned = answerIsCorrect ? 500 + speedBonus : 0;
 
-            const myId = localPlayerId;
-            const myNick = (localPlayerNickname || "").trim().toLowerCase();
-
             const gameRef = doc(db, "games", pin);
-            const freshSnap = await getDoc(gameRef);
-            const currentPlayers = (freshSnap.exists() && freshSnap.data().players) || gameData?.players || [];
 
-            const updatedPlayers = currentPlayers.map((player) => {
-                const isMe = (myId && player.id === myId) ||
-                             (myNick && player.nickname?.trim().toLowerCase() === myNick);
-                if (isMe) {
+            const updatedPlayers = gameData.players.map((player) => {
+                if (
+                    player.id === currentPlayer?.id ||
+                    player.nickname === currentPlayer?.nickname
+                ) {
                     return {
                         ...player,
-                        answer: answerToSubmit,
+                        answer: selectedAnswer,
                         answered: true,
                         correct: answerIsCorrect,
                         timeRemaining: timeLeft,
                         score: (player.score || 0) + pointsEarned,
                         correctCount: (player.correctCount || 0) + (answerIsCorrect ? 1 : 0),
                         wrongCount: (player.wrongCount || 0) + (answerIsCorrect ? 0 : 1),
-                        scoreAwarded: true,
                     };
                 }
 
@@ -378,9 +365,10 @@ function GameScreen() {
             await updateDoc(gameRef, {
                 players: updatedPlayers,
             });
+
+            setSubmitted(true);
         } catch (error) {
-            console.error("Answer submit error:", error);
-            setSubmitted(false);
+            console.log("Answer submit error:", error);
         }
     };
 
@@ -434,7 +422,6 @@ function GameScreen() {
             <Podium
                 winners={sorted.map((p) => ({
                     name: p.nickname,
-                    nickname: p.nickname,
                     score: p.score || 0,
                     correctCount: p.correctCount,
                     wrongCount: p.wrongCount,
@@ -485,8 +472,8 @@ function GameScreen() {
     return (
         <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-between p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
             {/* Background ambient lighting glows */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[380px] bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[280px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-380px bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-280px bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
             {/* Top Navigation Bar */}
             <div className="w-full max-w-4xl flex justify-between items-center z-20 mb-2">
@@ -534,7 +521,7 @@ function GameScreen() {
 
                 {/* Central Top Timer Ring Emblem */}
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-                    <div className={`w-14 h-14 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse" : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"} flex flex-col items-center justify-center text-center transition-all`}>
+                    <div className={`w-15 h-15 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse" : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"} flex flex-col items-center justify-center text-center transition-all`}>
                         <span className={`text-base font-black leading-none ${timeLeft <= 5 ? "text-rose-400" : "text-white"}`}>
                             {timeLeft}
                         </span>
@@ -564,18 +551,18 @@ function GameScreen() {
                     {/* Question Text */}
                     <div className="text-center my-4 sm:my-6">
                         <h2 className="text-xl sm:text-2xl font-black text-white leading-relaxed tracking-wide">
-                            {typeof question.question === "object" ? question.question?.text : (question.questionText || question.question)}
+                            {question.question}
                         </h2>
                         <div className="flex items-center justify-center space-x-2 text-purple-400/50 my-3">
-                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
+                            <span className="w-8 h-2px bg-purple-500/30"></span>
                             <span className="text-amber-400 text-xs">⭐</span>
-                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
+                            <span className="w-8 h-2px bg-purple-500/30"></span>
                         </div>
                     </div>
 
-                    {/* Options List */}
+                    {/* Shuffled Options List */}
                     <div className="space-y-3 my-6">
-                        {(question.options || [])?.map((option, idx) => {
+                        {(displayOptions.length > 0 ? displayOptions : question.options)?.map((option, idx) => {
                             const letter = optionLetters[idx % optionLetters.length];
                             const isSelected = selectedAnswer === option;
 
@@ -673,7 +660,7 @@ function GameScreen() {
                                         }`}
                                 >
                                     {isCurrent && (
-                                        <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase">
+                                        <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-md uppercase">
                                             YOU
                                         </span>
                                     )}

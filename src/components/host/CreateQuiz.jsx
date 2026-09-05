@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchQuestions, addQuestion, setQuiz } from "../../redux/quizSlice";
+import { fetchQuestions,addQuestion } from "../../redux/quizSlice";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, setDoc } from "firebase/firestore";
@@ -131,7 +131,7 @@ function CreateQuiz() {
 
     const formattedQuestions = questions.map((q) => {
       const rawOptions = [
-        ...(q.incorrectAnswers || []),
+        ...q.incorrectAnswers,
         q.correctAnswer,
       ];
 
@@ -142,15 +142,10 @@ function CreateQuiz() {
         [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
       }
 
-      const qText =
-        typeof q.question === "object"
-          ? q.question?.text
-          : (q.questionText || q.question || "");
-
       return {
-        id: q.id || `q_${Date.now()}_${Math.random()}`,
-        question: qText,
-        questionText: qText,
+        id: q.id,
+        question: q.question.text,
+        questionText: q.question.text,
         options: shuffledOptions,
         correctAnswer: q.correctAnswer,
         correctIndex: shuffledOptions.indexOf(q.correctAnswer),
@@ -161,15 +156,6 @@ function CreateQuiz() {
       await setDoc(doc(db, "quizzes", "default_quiz"), {
         questions: formattedQuestions,
       });
-
-      // Update in Redux
-      dispatch(
-        setQuiz({
-          quizId: "default_quiz",
-          title: "Quiz Battle",
-          questions: formattedQuestions,
-        })
-      );
 
       // 🎉 Host quiz success sound
       playSoundOfJoy();
@@ -396,17 +382,13 @@ function CreateQuiz() {
 
            
              
-            {questions.map((question, index) => {
-  const options = [...(question.incorrectAnswers || []), question.correctAnswer];
-  const qText =
-    typeof question.question === "object"
-      ? question.question?.text
-      : (question.question || question.questionText || "");
+           {questions.map((question, index) => {
+  const options = [...question.incorrectAnswers, question.correctAnswer];
 
   return (
     <div
-      key={question.id || index}
-      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-white/[0.13]"
+      key={question.id}
+      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-color-white/[0.13]"
     >
       {/* Question Header */}
       <div className="flex items-start gap-4 border-b border-white/10 bg-white/5 p-5 sm:p-6">
@@ -420,7 +402,7 @@ function CreateQuiz() {
           </p>
 
           <h3 className="text-base font-bold leading-7 text-white sm:text-lg">
-            {qText}
+            {question.question.text}
           </h3>
         </div>
       </div>
