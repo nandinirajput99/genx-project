@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 
 // Confetti Particle Canvas Component
 const ConfettiCanvas = () => {
@@ -405,12 +406,12 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
 
                 {/* 5. Navigation Home / Play Again Button */}
                 <div className="mt-8 flex justify-center gap-4">
-                    <a
-                        href="/game-options"
+                    <Link
+                        to="/game-options"
                         className="bg-linear-to-r from-indigo-500 via-purple-600 to-indigo-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-purple-900/40 transition duration-200 text-sm sm:text-base cursor-pointer transform hover:-translate-y-0.5"
                     >
                         Play Another Game 🚀
-                    </a>
+                    </Link>
                 </div>
 
             </div>

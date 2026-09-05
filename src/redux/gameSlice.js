@@ -1,5 +1,4 @@
 import { createSlice } from "@reduxjs/toolkit";
-
 const initialState = {
   gameId: "",
   pin: "",
@@ -57,6 +56,7 @@ const gameSlice = createSlice({
     resetGame: () => initialState,
   },
 });
+
 export const {
   setGame,
   setGameStatus,

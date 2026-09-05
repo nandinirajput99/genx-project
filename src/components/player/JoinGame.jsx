@@ -39,13 +39,47 @@ function JoinGame() {
             const gameRef = doc(db, "games", gamePin);
             const gameSnap = await getDoc(gameRef);
             if (!gameSnap.exists()) {
-                setError("Invalid Game PIN");
+                setError("Invalid Game PIN. Please check and try again.");
                 return;
             }
 
             const gameData = gameSnap.data();
 
-            // Create player
+            if (gameData.status === "finished") {
+                setError("This game session has already ended.");
+                return;
+            }
+
+            // Check if player already exists (reconnection flow)
+            const existingPlayer = gameData.players?.find(
+                (p) => p.nickname.toLowerCase() === playerName.toLowerCase()
+            );
+
+            if (existingPlayer) {
+                // Reconnect existing player
+                localStorage.setItem("gamePin", gamePin);
+                localStorage.setItem("currentPlayerId", existingPlayer.id);
+                localStorage.setItem("currentPlayerNickname", existingPlayer.nickname);
+
+                dispatch(addPlayer(existingPlayer));
+                dispatch(
+                    setGame({
+                        gameId: gamePin,
+                        pin: gamePin,
+                        quizId: gameData.quizId || "",
+                        status: gameData.status || "waiting",
+                    })
+                );
+
+                if (gameData.status === "playing") {
+                    navigate("/player/game");
+                } else {
+                    navigate("/player/lobby");
+                }
+                return;
+            }
+
+            // Create new player
             const playerData = {
                 id: "player_" + Date.now(),
                 nickname: playerName,
@@ -77,7 +111,11 @@ function JoinGame() {
             localStorage.setItem("currentPlayerId", playerData.id);
             localStorage.setItem("currentPlayerNickname", playerName);
 
-            navigate("/player/lobby");
+            if (gameData.status === "playing") {
+                navigate("/player/game");
+            } else {
+                navigate("/player/lobby");
+            }
 
         } catch (error) {
             console.log("Join Game Error:", error);
@@ -90,8 +128,8 @@ function JoinGame() {
     return (
         <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-center p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
             {/* Background ambient lighting glows (Pure Purple / Indigo) */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-380px bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-280px bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-95 bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-70 bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
             {/* Floating 3D Question mark decorative tiles (Desktop) */}
             <div className="hidden lg:flex absolute left-12 top-1/4 w-14 h-14 bg-purple-900/40 border border-purple-500/40 rounded-2xl items-center justify-center text-purple-300 text-2xl font-black shadow-[0_0_20px_rgba(168,85,247,0.3)] -rotate-12 animate-pulse">
@@ -147,9 +185,9 @@ function JoinGame() {
 
                 {/* Subtitle Divider Line */}
                 <div className="flex items-center justify-center space-x-3 text-purple-300/80 text-xs sm:text-sm font-semibold tracking-widest mt-2">
-                    <span className="w-8 sm:w-12 h-2px bg-linear-to-r from-transparent to-purple-400/60"></span>
+                    <span className="w-8 sm:w-12 h-[2px] bg-linear-to-r from-transparent to-purple-400/60"></span>
                     <span>Play · Think · Win</span>
-                    <span className="w-8 sm:w-12 h-2px bg-linear-to-l from-transparent to-purple-400/60"></span>
+                    <span className="w-8 sm:w-12 h-[2px] bg-linear-to-l from-transparent to-purple-400/60"></span>
                 </div>
             </div>
 
@@ -185,7 +223,7 @@ function JoinGame() {
 
                     {/* Top Golden Trophy Badge Emblem */}
                     <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-                        <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-linear-to-b from-amber-300 via-yellow-500 to-amber-600 border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center text-2xl sm:text-3xl relative group">
+                        <div className="w-14 h-14 rounded-full bg-linear-to-b from-amber-300 via-yellow-500 to-amber-600 border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center text-2xl sm:text-3xl relative group">
                             🏆
                         </div>
                     </div>

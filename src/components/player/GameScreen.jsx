@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, runTransaction } from "firebase/firestore";
 import Podium from "../common/Podium";
 
 function GameScreen() {
@@ -24,24 +24,16 @@ function GameScreen() {
     const pin = game?.pin || localStorage.getItem("gamePin");
 
     const localPlayerId = localStorage.getItem("currentPlayerId");
-    const localPlayerNickname = localStorage.getItem(
-        "currentPlayerNickname"
-    );
+    const localPlayerNickname = localStorage.getItem("currentPlayerNickname");
 
     const currentPlayer =
-        gameData?.players?.find(
-            (p) => p.id === localPlayerId
-        ) ||
-        gameData?.players?.find(
-            (p) => p.nickname === localPlayerNickname
-        ) ||
-        players?.find(
-            (p) => p.id === localPlayerId
-        ) ||
+        gameData?.players?.find((p) => p.id === localPlayerId) ||
+        gameData?.players?.find((p) => p.nickname === localPlayerNickname) ||
+        players?.find((p) => p.id === localPlayerId) ||
         players?.[players.length - 1];
 
     // Reliable AudioContext Resumer
-    const resumeAudio = () => {
+    const resumeAudio = useCallback(() => {
         try {
             if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
                 audioCtxRef.current.resume().catch(() => {});
@@ -49,7 +41,7 @@ function GameScreen() {
         } catch {
             // ignore
         }
-    };
+    }, []);
 
     // Background Tune (Calm, gentle, non-distracting ambient lo-fi game soundtrack)
     useEffect(() => {
@@ -79,22 +71,22 @@ function GameScreen() {
 
             // Peaceful, non-distracting ambient melody (C -> G -> Am -> F)
             const melody = [
-                { f: 261.63, b: 130.81 }, // C4, C3 bass
-                { f: 329.63, b: 130.81 }, // E4
-                { f: 392.00, b: 130.81 }, // G4
-                { f: 523.25, b: 130.81 }, // C5
-                { f: 196.00, b: 98.00 },  // G3, G2 bass
-                { f: 246.94, b: 98.00 },  // B3
-                { f: 293.66, b: 98.00 },  // D4
-                { f: 392.00, b: 98.00 },  // G4
-                { f: 220.00, b: 110.00 }, // A3, A2 bass
-                { f: 261.63, b: 110.00 }, // C4
-                { f: 329.63, b: 110.00 }, // E4
-                { f: 440.00, b: 110.00 }, // A4
-                { f: 174.61, b: 87.31 },  // F3, F2 bass
-                { f: 220.00, b: 87.31 },  // A3
-                { f: 261.63, b: 87.31 },  // C4
-                { f: 349.23, b: 87.31 },  // F4
+                { f: 261.63, b: 130.81 },
+                { f: 329.63, b: 130.81 },
+                { f: 392.00, b: 130.81 },
+                { f: 523.25, b: 130.81 },
+                { f: 196.00, b: 98.00 },
+                { f: 246.94, b: 98.00 },
+                { f: 293.66, b: 98.00 },
+                { f: 392.00, b: 98.00 },
+                { f: 220.00, b: 110.00 },
+                { f: 261.63, b: 110.00 },
+                { f: 329.63, b: 110.00 },
+                { f: 440.00, b: 110.00 },
+                { f: 174.61, b: 87.31 },
+                { f: 220.00, b: 87.31 },
+                { f: 261.63, b: 87.31 },
+                { f: 349.23, b: 87.31 },
             ];
             let noteIndex = 0;
 
@@ -111,7 +103,6 @@ function GameScreen() {
                     noteIndex++;
                     const now = ctx.currentTime;
 
-                    // 1. Soft melodic chime tone
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
                     const filter = ctx.createBiquadFilter();
@@ -119,7 +110,6 @@ function GameScreen() {
                     osc.type = "sine";
                     osc.frequency.setValueAtTime(f, now);
 
-                    // Lowpass filter keeps sound warm & relaxing
                     filter.type = "lowpass";
                     filter.frequency.setValueAtTime(650, now);
 
@@ -134,7 +124,6 @@ function GameScreen() {
                     osc.start(now);
                     osc.stop(now + 0.4);
 
-                    // 2. Soft bass warmth (plays on alternate beats)
                     if (noteIndex % 2 === 0) {
                         const oscBass = ctx.createOscillator();
                         const gainBass = ctx.createGain();
@@ -188,7 +177,6 @@ function GameScreen() {
         window.addEventListener("mousemove", handleGesture, { once: true });
         window.addEventListener("focus", handleGesture);
 
-        // Attempt initial resume
         resumeAudio();
 
         return () => {
@@ -203,7 +191,7 @@ function GameScreen() {
                 audioCtxRef.current.close().catch(() => {});
             }
         };
-    }, []);
+    }, [resumeAudio]);
 
     // Firebase live game listener
     useEffect(() => {
@@ -222,6 +210,11 @@ function GameScreen() {
 
             const data = snapshot.data();
             setGameData(data);
+
+            // If game is in lobby, redirect to lobby
+            if (data.status === "waiting") {
+                navigate("/player/lobby");
+            }
         });
 
         return () => unsubscribe();
@@ -233,29 +226,27 @@ function GameScreen() {
         gameData?.currentQuestion ??
         0;
 
-    const question =
-        gameData?.questions?.[currentQuestionIndex];
+    const question = gameData?.questions?.[currentQuestionIndex];
+    const questionText =
+        typeof question?.question === "object"
+            ? question?.question?.text
+            : (question?.questionText || question?.question || "");
 
-    // Shuffled display options per question so answers are never in the same place
-    const [displayOptions, setDisplayOptions] = useState([]);
-
-    useEffect(() => {
-        if (question?.options) {
-            const shuffled = [...question.options];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            setDisplayOptions(shuffled);
-        }
-    }, [currentQuestionIndex, question?.question, question?.options]);
+    const correctOption =
+        typeof question?.correctAnswer === "number"
+            ? question?.options?.[question?.correctAnswer]
+            : question?.correctAnswer;
 
     // Auto-synchronized countdown timer for user
-    useEffect(() => {
-        if (!gameData || gameData.status !== "playing") return;
+    const gameStatus = gameData?.status;
+    const questionDuration = gameData?.questionDuration || question?.timer || 20;
+    const questionStartedAt = gameData?.questionStartedAt;
 
-        const duration = gameData.questionDuration || question?.timer || 20;
-        const startedAt = gameData.questionStartedAt || Date.now();
+    useEffect(() => {
+        if (gameStatus !== "playing") return;
+
+        const duration = questionDuration;
+        const startedAt = questionStartedAt || Date.now();
 
         const updateTimer = () => {
             const elapsed = Math.floor((Date.now() - startedAt) / 1000);
@@ -266,7 +257,7 @@ function GameScreen() {
         updateTimer();
         const interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
-    }, [gameData?.questionStartedAt, gameData?.questionDuration, gameData?.currentQuestionIndex, gameData?.status, question]);
+    }, [gameStatus, questionDuration, questionStartedAt]);
 
     // Player answer state sync with Firebase
     useEffect(() => {
@@ -280,7 +271,7 @@ function GameScreen() {
             if (me) {
                 setSubmitted(!!me.answered);
                 setSelectedAnswer(me.answer || "");
-                if (me.correct !== undefined) {
+                if (me.correct !== undefined && me.correct !== null) {
                     setIsCorrect(me.correct);
                 }
             } else {
@@ -291,41 +282,35 @@ function GameScreen() {
         }
     }, [
         gameData?.players,
-        gameData?.currentQuestionIndex,
         localPlayerId,
         localPlayerNickname,
     ]);
 
-    // Reset local selection when question changes
+    // Reset local selection when question index changes
     useEffect(() => {
         setSelectedAnswer("");
         setSubmitted(false);
         setIsCorrect(null);
-    }, [gameData?.currentQuestionIndex]);
+    }, [currentQuestionIndex]);
 
     // Answer select
     const handleAnswer = (answer) => {
         resumeAudio();
-        if (submitted || timeLeft === 0) {
+        if (submitted || timeLeft === 0 || gameData?.answerRevealed) {
             return;
         }
 
         setSelectedAnswer(answer);
     };
 
-    const correctOption =
-        typeof question?.correctAnswer === "number"
-            ? question?.options?.[question?.correctAnswer]
-            : question?.correctAnswer;
-
-    // Answer submit with speed-based scoring
+    // Atomic Answer Submit with Concurrency Protection (runTransaction)
     const submitAnswer = async () => {
         resumeAudio();
         if (
             selectedAnswer === "" ||
             submitted ||
             timeLeft === 0 ||
-            !gameData?.players ||
+            !pin ||
             !question
         ) {
             return;
@@ -334,41 +319,57 @@ function GameScreen() {
         try {
             const answerIsCorrect = selectedAnswer === correctOption;
             setIsCorrect(answerIsCorrect);
+            setSubmitted(true);
 
-            const duration = gameData.questionDuration || question.timer || 20;
-            // Faster answer = more points! (500 base + up to 500 speed bonus)
-            const speedBonus = Math.max(0, Math.round((timeLeft / duration) * 500));
+            const duration = gameData?.questionDuration || question?.timer || 20;
+            const speedBonus = answerIsCorrect && duration > 0
+                ? Math.max(0, Math.round((timeLeft / duration) * 500))
+                : 0;
             const pointsEarned = answerIsCorrect ? 500 + speedBonus : 0;
 
             const gameRef = doc(db, "games", pin);
 
-            const updatedPlayers = gameData.players.map((player) => {
-                if (
-                    player.id === currentPlayer?.id ||
-                    player.nickname === currentPlayer?.nickname
-                ) {
-                    return {
-                        ...player,
-                        answer: selectedAnswer,
-                        answered: true,
-                        correct: answerIsCorrect,
-                        timeRemaining: timeLeft,
-                        score: (player.score || 0) + pointsEarned,
-                        correctCount: (player.correctCount || 0) + (answerIsCorrect ? 1 : 0),
-                        wrongCount: (player.wrongCount || 0) + (answerIsCorrect ? 0 : 1),
-                    };
-                }
+            // Execute atomic transaction so multiple players submitting at the same time never overwrite each other
+            await runTransaction(db, async (transaction) => {
+                const gameSnap = await transaction.get(gameRef);
+                if (!gameSnap.exists()) return;
 
-                return player;
+                const liveData = gameSnap.data();
+                const livePlayers = liveData.players || [];
+
+                const updatedPlayers = livePlayers.map((player) => {
+                    const isTargetPlayer =
+                        player.id === (localPlayerId || currentPlayer?.id) ||
+                        player.nickname === (localPlayerNickname || currentPlayer?.nickname);
+
+                    if (isTargetPlayer) {
+                        // Prevent re-scoring if already recorded
+                        if (player.scoredForQuestion === currentQuestionIndex) {
+                            return player;
+                        }
+
+                        return {
+                            ...player,
+                            answer: selectedAnswer,
+                            answered: true,
+                            correct: answerIsCorrect,
+                            timeRemaining: timeLeft,
+                            score: (player.score || 0) + pointsEarned,
+                            correctCount: (player.correctCount || 0) + (answerIsCorrect ? 1 : 0),
+                            wrongCount: (player.wrongCount || 0) + (answerIsCorrect ? 0 : 1),
+                            scoredForQuestion: currentQuestionIndex,
+                        };
+                    }
+
+                    return player;
+                });
+
+                transaction.update(gameRef, {
+                    players: updatedPlayers,
+                });
             });
-
-            await updateDoc(gameRef, {
-                players: updatedPlayers,
-            });
-
-            setSubmitted(true);
         } catch (error) {
-            console.log("Answer submit error:", error);
+            console.log("Answer submit transaction error:", error);
         }
     };
 
@@ -401,12 +402,8 @@ function GameScreen() {
 
     // Game finished: Display Podium with overall stats
     if (gameData.status === "finished") {
-        const sorted = [
-            ...(gameData.players || []),
-        ].sort(
-            (a, b) =>
-                (b.score || 0) -
-                (a.score || 0)
+        const sorted = [...(gameData.players || [])].sort(
+            (a, b) => (b.score || 0) - (a.score || 0)
         );
 
         const totalCorrect = sorted.reduce(
@@ -449,31 +446,15 @@ function GameScreen() {
         );
     }
 
-    const optionLetters = [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-    ];
-
-    const avatars = [
-        "🦉",
-        "🎮",
-        "🚀",
-        "👑",
-        "⭐",
-        "🔥",
-        "🎯",
-        "⚡",
-    ];
+    const optionLetters = ["A", "B", "C", "D", "E", "F"];
+    const avatars = ["🦉", "🎮", "🚀", "👑", "⭐", "🔥", "🎯", "⚡"];
+    const isAnswerRevealed = !!gameData.answerRevealed || timeLeft === 0;
 
     return (
         <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-between p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
             {/* Background ambient lighting glows */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-380px bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-280px bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-95 bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-70 bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
             {/* Top Navigation Bar */}
             <div className="w-full max-w-4xl flex justify-between items-center z-20 mb-2">
@@ -490,7 +471,7 @@ function GameScreen() {
                     <span className="absolute -top-1 -right-1 text-xs sm:text-sm">💡</span>
                 </div>
 
-                {/* Right Controls: Background Music Toggle & Language Selector */}
+                {/* Right Controls: Background Music Toggle */}
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
@@ -502,46 +483,54 @@ function GameScreen() {
                         title="Background Game Music Toggle"
                     >
                         <span>{musicEnabled ? "🔊" : "🔇"}</span>
-                        <span className="font-medium hidden sm:inline">{musicEnabled ? "Tune ON" : "Tune OFF"}</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        className="flex items-center space-x-1.5 bg-[#1a1438]/80 border border-purple-500/30 text-purple-200 text-xs sm:text-sm px-3.5 py-1.5 rounded-full backdrop-blur-md hover:bg-purple-900/40 transition cursor-pointer shadow-lg"
-                    >
-                        <span>🌐</span>
-                        <span className="font-medium">English</span>
-                        <span className="text-[10px]">▼</span>
+                        <span className="font-medium hidden sm:inline">{musicEnabled ? "Music ON" : "Music OFF"}</span>
                     </button>
                 </div>
             </div>
 
             {/* Main Glassmorphism Question Card */}
             <div className="w-full max-w-xl relative my-auto z-10">
-
                 {/* Central Top Timer Ring Emblem */}
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-                    <div className={`w-15 h-15 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse" : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"} flex flex-col items-center justify-center text-center transition-all`}>
-                        <span className={`text-base font-black leading-none ${timeLeft <= 5 ? "text-rose-400" : "text-white"}`}>
+                    <div
+                        className={`w-14 h-14 rounded-full bg-[#130a2e] border-4 ${
+                            timeLeft <= 5
+                                ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse"
+                                : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"
+                        } flex flex-col items-center justify-center text-center transition-all`}
+                    >
+                        <span
+                            className={`text-base font-black leading-none ${
+                                timeLeft <= 5 ? "text-rose-400" : "text-white"
+                            }`}
+                        >
                             {timeLeft}
                         </span>
-                        <span className="text-[9px] font-bold text-purple-300 uppercase tracking-tighter">sec</span>
+                        <span className="text-[9px] font-bold text-purple-300 uppercase tracking-tighter">
+                            sec
+                        </span>
                     </div>
                 </div>
 
                 <div className="bg-[#120a2e]/95 border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(147,51,234,0.35)] backdrop-blur-xl relative z-10 pt-10">
-
                     {/* Top Score & Question Info */}
                     <div className="flex justify-between items-center mb-6">
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">Question</span>
+                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                                Question
+                            </span>
                             <span className="text-lg font-black text-amber-300">
-                                {gameData.currentQuestionIndex + 1} <span className="text-purple-400/60 font-medium text-sm">/ {gameData.questions?.length || 10}</span>
+                                {currentQuestionIndex + 1}{" "}
+                                <span className="text-purple-400/60 font-medium text-sm">
+                                    / {gameData.questions?.length || 10}
+                                </span>
                             </span>
                         </div>
 
                         <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">Your Score</span>
+                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                                Your Score
+                            </span>
                             <span className="text-lg font-black text-amber-300 flex items-center gap-1">
                                 <span>🏆</span> {currentPlayer?.score || 0}
                             </span>
@@ -551,50 +540,77 @@ function GameScreen() {
                     {/* Question Text */}
                     <div className="text-center my-4 sm:my-6">
                         <h2 className="text-xl sm:text-2xl font-black text-white leading-relaxed tracking-wide">
-                            {question.question}
+                            {questionText}
                         </h2>
                         <div className="flex items-center justify-center space-x-2 text-purple-400/50 my-3">
-                            <span className="w-8 h-2px bg-purple-500/30"></span>
+                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
                             <span className="text-amber-400 text-xs">⭐</span>
-                            <span className="w-8 h-2px bg-purple-500/30"></span>
+                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
                         </div>
                     </div>
 
-                    {/* Shuffled Options List */}
+                    {/* Options List (Deterministic order matching host) */}
                     <div className="space-y-3 my-6">
-                        {(displayOptions.length > 0 ? displayOptions : question.options)?.map((option, idx) => {
+                        {question.options?.map((option, idx) => {
                             const letter = optionLetters[idx % optionLetters.length];
                             const isSelected = selectedAnswer === option;
+                            const isCorrectAnswer = option === correctOption;
+
+                            // Highlight correct answer in green and incorrect selected in red once revealed
+                            let btnStyle = "bg-[#1b113e] border-purple-800/60 hover:border-purple-500/80 text-white";
+                            let badgeStyle = "bg-purple-900/80 text-purple-200 border border-purple-500/30";
+
+                            if (isAnswerRevealed) {
+                                if (isCorrectAnswer) {
+                                    btnStyle = "bg-emerald-950/90 border-2 border-emerald-400 text-white shadow-[0_0_20px_rgba(52,211,153,0.5)]";
+                                    badgeStyle = "bg-emerald-400 text-black";
+                                } else if (isSelected && !isCorrectAnswer) {
+                                    btnStyle = "bg-rose-950/90 border-2 border-rose-500 text-rose-200 shadow-[0_0_20px_rgba(244,63,94,0.4)]";
+                                    badgeStyle = "bg-rose-500 text-white";
+                                } else {
+                                    btnStyle = "bg-[#1b113e]/40 border-purple-900/40 text-purple-400/40";
+                                }
+                            } else if (isSelected) {
+                                btnStyle = "bg-indigo-900/90 border-2 border-indigo-400 text-white shadow-[0_0_20px_rgba(129,140,248,0.4)]";
+                                badgeStyle = "bg-indigo-400 text-black";
+                            }
 
                             return (
                                 <button
                                     key={option}
                                     onClick={() => handleAnswer(option)}
-                                    disabled={submitted || timeLeft === 0}
-                                    className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all duration-200 text-left cursor-pointer border ${isSelected
-                                            ? "bg-emerald-950/80 border-2 border-emerald-400 text-white shadow-[0_0_20px_rgba(52,211,153,0.4)]"
-                                            : "bg-[#1b113e] border-purple-800/60 hover:border-purple-500/80 text-white"
-                                        } ${submitted || timeLeft === 0 ? "cursor-not-allowed opacity-90" : ""}`}
+                                    disabled={submitted || timeLeft === 0 || isAnswerRevealed}
+                                    className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all duration-200 text-left cursor-pointer border ${btnStyle} ${
+                                        submitted || timeLeft === 0 || isAnswerRevealed ? "cursor-default" : ""
+                                    }`}
                                 >
                                     <div className="flex items-center space-x-3.5">
-                                        <div
-                                            className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow-md ${isSelected
-                                                    ? "bg-emerald-400 text-black"
-                                                    : "bg-purple-900/80 text-purple-200 border border-purple-500/30"
-                                                }`}
-                                        >
+                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow-md ${badgeStyle}`}>
                                             {letter}
                                         </div>
                                         <span className="text-sm sm:text-base font-semibold">{option}</span>
                                     </div>
 
-                                    <div
-                                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
-                                                ? "border-emerald-400 bg-emerald-500 text-black"
-                                                : "border-purple-600/60 bg-purple-950/40"
+                                    <div className="flex items-center gap-2">
+                                        {isAnswerRevealed && isCorrectAnswer && (
+                                            <span className="text-xs bg-emerald-400 text-black font-black px-2 py-0.5 rounded">
+                                                CORRECT
+                                            </span>
+                                        )}
+                                        {isAnswerRevealed && isSelected && !isCorrectAnswer && (
+                                            <span className="text-xs bg-rose-500 text-white font-black px-2 py-0.5 rounded">
+                                                WRONG
+                                            </span>
+                                        )}
+                                        <div
+                                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                isSelected
+                                                    ? "border-amber-400 bg-amber-400 text-black"
+                                                    : "border-purple-600/60 bg-purple-950/40"
                                             }`}
-                                    >
-                                        {isSelected && <span className="text-xs font-black">✓</span>}
+                                        >
+                                            {isSelected && <span className="text-xs font-black">✓</span>}
+                                        </div>
                                     </div>
                                 </button>
                             );
@@ -602,25 +618,44 @@ function GameScreen() {
                     </div>
 
                     {/* Submit Button */}
-                    <button
-                        onClick={submitAnswer}
-                        disabled={selectedAnswer === "" || submitted || timeLeft === 0}
-                        className="w-full mt-4 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
-                    >
-                        <span>🚀</span>
-                        <span>{submitted ? "ANSWER SUBMITTED" : timeLeft === 0 ? "TIME EXPIRED" : "SUBMIT ANSWER"}</span>
-                    </button>
-
-                    {/* Live Correct vs Wrong Feedback for current user */}
-                    {submitted && isCorrect !== null && (
-                        <div className={`mt-3 text-center text-xs sm:text-sm font-extrabold py-2 px-4 rounded-xl border ${isCorrect ? "text-emerald-300 bg-emerald-950/70 border-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]" : "text-rose-300 bg-rose-950/70 border-rose-400/50 shadow-[0_0_15px_rgba(244,63,94,0.3)]"}`}>
-                            {isCorrect ? "✅ Great job! Your answer is Correct! 🎉" : "❌ Oops! Your answer is Wrong."}
-                        </div>
+                    {!isAnswerRevealed && (
+                        <button
+                            onClick={submitAnswer}
+                            disabled={selectedAnswer === "" || submitted || timeLeft === 0}
+                            className="w-full mt-4 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
+                        >
+                            <span>🚀</span>
+                            <span>{submitted ? "ANSWER SUBMITTED" : timeLeft === 0 ? "TIME EXPIRED" : "SUBMIT ANSWER"}</span>
+                        </button>
                     )}
 
-                    {/* How many players answered correct vs wrong */}
-                    {(submitted || gameData.answerRevealed || timeLeft === 0) && (
-                        <div className="mt-3 flex items-center justify-center gap-3">
+                    {/* Answer Feedback Banner */}
+                    {isAnswerRevealed ? (
+                        <div
+                            className={`mt-4 text-center text-xs sm:text-sm font-extrabold py-3 px-4 rounded-xl border ${
+                                !submitted
+                                    ? "text-amber-300 bg-amber-950/60 border-amber-500/40"
+                                    : isCorrect
+                                    ? "text-emerald-300 bg-emerald-950/70 border-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]"
+                                    : "text-rose-300 bg-rose-950/70 border-rose-400/50 shadow-[0_0_15px_rgba(244,63,94,0.3)]"
+                            }`}
+                        >
+                            {!submitted
+                                ? "⏰ Time's up! You did not submit an answer in time."
+                                : isCorrect
+                                ? "✅ Great job! Your answer is Correct! 🎉"
+                                : "❌ Oops! Your answer was Incorrect."}
+                        </div>
+                    ) : submitted ? (
+                        <div className="mt-4 flex items-center justify-center space-x-2 text-xs sm:text-sm font-semibold text-purple-300 animate-pulse">
+                            <span>⏳</span>
+                            <span>Answer locked in! Waiting for host / timer...</span>
+                        </div>
+                    ) : null}
+
+                    {/* Live Answer Statistics */}
+                    {isAnswerRevealed && (
+                        <div className="mt-4 flex items-center justify-center gap-3">
                             <div className="flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/40 px-3.5 py-1 rounded-full text-xs font-bold text-emerald-300 shadow-sm">
                                 <span>✅</span>
                                 <span>{correctAnswersCount} Correct</span>
@@ -631,15 +666,6 @@ function GameScreen() {
                             </div>
                         </div>
                     )}
-
-                    {/* Waiting Banner */}
-                    {submitted && (
-                        <div className="mt-4 flex items-center justify-center space-x-2 text-xs sm:text-sm font-semibold text-purple-300 animate-pulse">
-                            <span>⏳</span>
-                            <span>Waiting for the next question...</span>
-                        </div>
-                    )}
-
                 </div>
             </div>
 
@@ -654,13 +680,14 @@ function GameScreen() {
                             return (
                                 <div
                                     key={player.id || idx}
-                                    className={`flex items-center space-x-2.5 px-3.5 py-2 rounded-xl border  transition-all ${isCurrent
+                                    className={`flex items-center space-x-2.5 px-3.5 py-2 rounded-xl border transition-all ${
+                                        isCurrent
                                             ? "bg-purple-900/90 border-2 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)] relative"
                                             : "bg-[#1b113e]/70 border-purple-800/40 text-purple-200"
-                                        }`}
+                                    }`}
                                 >
                                     {isCurrent && (
-                                        <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-md uppercase">
+                                        <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase">
                                             YOU
                                         </span>
                                     )}

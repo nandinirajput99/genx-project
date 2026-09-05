@@ -1,5 +1,4 @@
 import { createSlice } from "@reduxjs/toolkit";
-
 const initialState = {
   players: [],
 };
@@ -15,7 +14,14 @@ const playersSlice = createSlice({
     },
 
     addPlayer: (state, action) => {
-      state.players.push(action.payload);
+      const exists = state.players.some(
+        (p) =>
+          p.id === action.payload.id ||
+          (p.nickname && action.payload.nickname && p.nickname.toLowerCase() === action.payload.nickname.toLowerCase())
+      );
+      if (!exists) {
+        state.players.push(action.payload);
+      }
     },
 
     updatePlayer: (state, action) => {
@@ -44,7 +50,7 @@ const playersSlice = createSlice({
       );
 
       if (player) {
-        player.score += points;
+        player.score = (player.score || 0) + points;
       }
     },
 

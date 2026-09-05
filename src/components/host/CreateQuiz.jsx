@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchQuestions,addQuestion } from "../../redux/quizSlice";
+import { fetchQuestions, addQuestion, removeQuestion, setQuiz } from "../../redux/quizSlice";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, setDoc } from "firebase/firestore";
@@ -130,10 +130,12 @@ function CreateQuiz() {
     if (questions.length === 0) return;
 
     const formattedQuestions = questions.map((q) => {
-      const rawOptions = [
-        ...q.incorrectAnswers,
-        q.correctAnswer,
-      ];
+      const rawOptions = q.options
+        ? [...q.options]
+        : [
+            ...(q.incorrectAnswers || []),
+            q.correctAnswer,
+          ];
 
       // Shuffle options randomly (Fisher-Yates style)
       const shuffledOptions = [...rawOptions];
@@ -142,10 +144,12 @@ function CreateQuiz() {
         [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
       }
 
+      const qText = typeof q.question === "object" ? q.question?.text : (q.questionText || q.question || "");
+
       return {
-        id: q.id,
-        question: q.question.text,
-        questionText: q.question.text,
+        id: q.id || `q_${Date.now()}_${Math.random()}`,
+        question: qText,
+        questionText: qText,
         options: shuffledOptions,
         correctAnswer: q.correctAnswer,
         correctIndex: shuffledOptions.indexOf(q.correctAnswer),
@@ -156,6 +160,12 @@ function CreateQuiz() {
       await setDoc(doc(db, "quizzes", "default_quiz"), {
         questions: formattedQuestions,
       });
+
+      dispatch(setQuiz({
+        quizId: "default_quiz",
+        title: "Default Quiz",
+        questions: formattedQuestions,
+      }));
 
       // 🎉 Host quiz success sound
       playSoundOfJoy();
@@ -383,12 +393,19 @@ function CreateQuiz() {
            
              
            {questions.map((question, index) => {
-  const options = [...question.incorrectAnswers, question.correctAnswer];
+  const options = question.options || [
+    ...(question.incorrectAnswers || []),
+    question.correctAnswer,
+  ];
+  const qText =
+    typeof question.question === "object"
+      ? question.question?.text
+      : (question.questionText || question.question || "");
 
   return (
     <div
-      key={question.id}
-      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-color-white/[0.13]"
+      key={question.id || index}
+      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-white/[0.13]"
     >
       {/* Question Header */}
       <div className="flex items-start gap-4 border-b border-white/10 bg-white/5 p-5 sm:p-6">
@@ -402,17 +419,25 @@ function CreateQuiz() {
           </p>
 
           <h3 className="text-base font-bold leading-7 text-white sm:text-lg">
-            {question.question.text}
+            {qText}
           </h3>
         </div>
+
+        <button
+          onClick={() => dispatch(removeQuestion(index))}
+          className="text-red-400 hover:text-red-300 hover:bg-red-500/20 p-2 rounded-xl transition text-sm cursor-pointer"
+          title="Delete Question"
+        >
+          🗑️
+        </button>
       </div>
 
       {/* Options */}
       <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
         {options.map((option, optionIndex) => (
           <div
-            key={`${question.id}-${optionIndex}`}
-            className="group/option flex min-h-64px items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 transition-all duration-200 hover:border-indigo-400/40 hover:bg-indigo-500/10"
+            key={`${question.id || index}-${optionIndex}`}
+            className="group/option flex min-h-[64px] items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4 transition-all duration-200 hover:border-indigo-400/40 hover:bg-indigo-500/10"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm font-black text-indigo-300">
               {String.fromCharCode(65 + optionIndex)}

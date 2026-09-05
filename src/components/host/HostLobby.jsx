@@ -93,6 +93,8 @@ export default function HostLobby({ quizId }) {
     ).toString();
 
     setPin(generatedPin);
+    localStorage.setItem("hostPin", generatedPin);
+    localStorage.setItem("gamePin", generatedPin);
 
     const createGame = async () => {
       try {
@@ -199,6 +201,8 @@ export default function HostLobby({ quizId }) {
     }
 
     try {
+      localStorage.setItem("hostPin", pin);
+      localStorage.setItem("gamePin", pin);
       const gameRef = doc(db, "games", pin);
 
       await setDoc(
