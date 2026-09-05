@@ -40,7 +40,18 @@ function GameScreen() {
         ) ||
         players?.[players.length - 1];
 
-    // Background Tune (Gentle, non-distracting ambient lo-fi arpeggios)
+    // Reliable AudioContext Resumer
+    const resumeAudio = () => {
+        try {
+            if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+                audioCtxRef.current.resume().catch(() => {});
+            }
+        } catch {
+            // ignore
+        }
+    };
+
+    // Background Tune (Calm, gentle, non-distracting ambient lo-fi melody)
     useEffect(() => {
         if (!musicEnabled) {
             if (musicTimerRef.current) {
@@ -66,15 +77,20 @@ function GameScreen() {
                 ctx.resume().catch(() => {});
             }
 
-            // Gentle ambient lo-fi pentatonic melody (warm, soothing and low volume)
+            // Peaceful, non-distracting ambient pentatonic melody (C-E-G-A-C-A-G-E)
             const melody = [
-                261.63, 329.63, 392.00, 523.25, // C4, E4, G4, C5
-                440.00, 392.00, 329.63, 293.66, // A4, G4, E4, D4
+                261.63, 329.63, 392.00, 440.00, 523.25, 440.00, 392.00, 329.63,
             ];
             let noteIndex = 0;
 
             const playSoftNote = () => {
-                if (!ctx || ctx.state !== "running") return;
+                if (!ctx) return;
+                if (ctx.state === "suspended") {
+                    ctx.resume().catch(() => {});
+                    return;
+                }
+                if (ctx.state !== "running") return;
+
                 try {
                     const freq = melody[noteIndex % melody.length];
                     noteIndex++;
@@ -86,25 +102,27 @@ function GameScreen() {
                     osc.type = "sine";
                     osc.frequency.setValueAtTime(freq, ctx.currentTime);
 
+                    // Warm lowpass filter to remove harshness & make it soothing
                     filter.type = "lowpass";
-                    filter.frequency.setValueAtTime(750, ctx.currentTime);
+                    filter.frequency.setValueAtTime(550, ctx.currentTime);
 
+                    // Soft ambient envelope (quiet gain ~0.025)
                     gain.gain.setValueAtTime(0, ctx.currentTime);
-                    gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 0.05);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+                    gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.48);
 
                     osc.connect(filter);
                     filter.connect(gain);
                     gain.connect(ctx.destination);
 
                     osc.start(ctx.currentTime);
-                    osc.stop(ctx.currentTime + 0.45);
+                    osc.stop(ctx.currentTime + 0.5);
                 } catch {
                     // Ignore audio playback exceptions
                 }
             };
 
-            musicTimerRef.current = setInterval(playSoftNote, 520);
+            musicTimerRef.current = setInterval(playSoftNote, 560);
         } catch (err) {
             console.log("Background music error:", err);
         }
@@ -117,18 +135,22 @@ function GameScreen() {
         };
     }, [musicEnabled]);
 
-    // Handle initial browser gesture for audio
+    // Handle user gestures anywhere on the screen to unlock Web Audio
     useEffect(() => {
-        const resumeAudio = () => {
-            if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-                audioCtxRef.current.resume().catch(() => {});
-            }
+        const handleGesture = () => {
+            resumeAudio();
         };
-        window.addEventListener("click", resumeAudio, { once: true });
-        window.addEventListener("touchstart", resumeAudio, { once: true });
+
+        window.addEventListener("pointerdown", handleGesture);
+        window.addEventListener("touchstart", handleGesture);
+        window.addEventListener("click", handleGesture);
+        window.addEventListener("keydown", handleGesture);
+
         return () => {
-            window.removeEventListener("click", resumeAudio);
-            window.removeEventListener("touchstart", resumeAudio);
+            window.removeEventListener("pointerdown", handleGesture);
+            window.removeEventListener("touchstart", handleGesture);
+            window.removeEventListener("click", handleGesture);
+            window.removeEventListener("keydown", handleGesture);
             if (musicTimerRef.current) clearInterval(musicTimerRef.current);
             if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
                 audioCtxRef.current.close().catch(() => {});
@@ -222,6 +244,7 @@ function GameScreen() {
 
     // Answer select
     const handleAnswer = (answer) => {
+        resumeAudio();
         if (submitted || timeLeft === 0) {
             return;
         }
@@ -236,6 +259,7 @@ function GameScreen() {
 
     // Answer submit with speed-based scoring
     const submitAnswer = async () => {
+        resumeAudio();
         if (
             selectedAnswer === "" ||
             submitted ||
@@ -409,7 +433,10 @@ function GameScreen() {
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
-                        onClick={() => setMusicEnabled((prev) => !prev)}
+                        onClick={() => {
+                            setMusicEnabled((prev) => !prev);
+                            resumeAudio();
+                        }}
                         className="flex items-center space-x-1.5 bg-[#1a1438]/80 border border-purple-500/30 text-purple-200 text-xs sm:text-sm px-3 py-1.5 rounded-full backdrop-blur-md hover:bg-purple-900/40 transition cursor-pointer shadow-lg"
                         title="Background Game Music Toggle"
                     >
