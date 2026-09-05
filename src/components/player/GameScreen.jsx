@@ -68,7 +68,7 @@ function GameScreen() {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return;
 
-            if (!audioCtxRef.current) {
+            if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
                 audioCtxRef.current = new AudioCtx();
             }
 
@@ -201,6 +201,7 @@ function GameScreen() {
             if (musicTimerRef.current) clearInterval(musicTimerRef.current);
             if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
                 audioCtxRef.current.close().catch(() => {});
+                audioCtxRef.current = null;
             }
         };
     }, []);
@@ -236,26 +237,17 @@ function GameScreen() {
     const question =
         gameData?.questions?.[currentQuestionIndex];
 
-    // Shuffled display options per question so answers are never in the same place
-    const [displayOptions, setDisplayOptions] = useState([]);
-
-    useEffect(() => {
-        if (question?.options) {
-            const shuffled = [...question.options];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            setDisplayOptions(shuffled);
-        }
-    }, [currentQuestionIndex, question?.question, question?.options]);
+    const gameStatus = gameData?.status;
+    const qDuration = gameData?.questionDuration || question?.timer || 20;
+    const qStartedAt = gameData?.questionStartedAt;
+    const currentQIdx = gameData?.currentQuestionIndex;
 
     // Auto-synchronized countdown timer for user
     useEffect(() => {
-        if (!gameData || gameData.status !== "playing") return;
+        if (!gameData || gameStatus !== "playing") return;
 
-        const duration = gameData.questionDuration || question?.timer || 20;
-        const startedAt = gameData.questionStartedAt || Date.now();
+        const duration = qDuration;
+        const startedAt = qStartedAt || Date.now();
 
         const updateTimer = () => {
             const elapsed = Math.floor((Date.now() - startedAt) / 1000);
@@ -266,7 +258,7 @@ function GameScreen() {
         updateTimer();
         const interval = setInterval(updateTimer, 1000);
         return () => clearInterval(interval);
-    }, [gameData?.questionStartedAt, gameData?.questionDuration, gameData?.currentQuestionIndex, gameData?.status, question]);
+    }, [gameData, gameStatus, qDuration, qStartedAt, currentQIdx]);
 
     // Player answer state sync with Firebase
     useEffect(() => {
@@ -325,7 +317,7 @@ function GameScreen() {
             selectedAnswer === "" ||
             submitted ||
             timeLeft === 0 ||
-            !gameData?.players ||
+            !pin ||
             !question
         ) {
             return;
@@ -335,17 +327,19 @@ function GameScreen() {
             const answerIsCorrect = selectedAnswer === correctOption;
             setIsCorrect(answerIsCorrect);
 
-            const duration = gameData.questionDuration || question.timer || 20;
+            const duration = gameData?.questionDuration || question?.timer || 20;
             // Faster answer = more points! (500 base + up to 500 speed bonus)
             const speedBonus = Math.max(0, Math.round((timeLeft / duration) * 500));
             const pointsEarned = answerIsCorrect ? 500 + speedBonus : 0;
 
             const gameRef = doc(db, "games", pin);
+            const freshSnap = await getDoc(gameRef);
+            const currentPlayers = (freshSnap.exists() && freshSnap.data().players) || gameData?.players || [];
 
-            const updatedPlayers = gameData.players.map((player) => {
+            const updatedPlayers = currentPlayers.map((player) => {
                 if (
                     player.id === currentPlayer?.id ||
-                    player.nickname === currentPlayer?.nickname
+                    (currentPlayer?.nickname && player.nickname === currentPlayer.nickname)
                 ) {
                     return {
                         ...player,
@@ -356,6 +350,7 @@ function GameScreen() {
                         score: (player.score || 0) + pointsEarned,
                         correctCount: (player.correctCount || 0) + (answerIsCorrect ? 1 : 0),
                         wrongCount: (player.wrongCount || 0) + (answerIsCorrect ? 0 : 1),
+                        scoreAwarded: true,
                     };
                 }
 
@@ -472,8 +467,8 @@ function GameScreen() {
     return (
         <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-between p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
             {/* Background ambient lighting glows */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-380px bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-280px bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[380px] bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[280px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
             {/* Top Navigation Bar */}
             <div className="w-full max-w-4xl flex justify-between items-center z-20 mb-2">
@@ -521,7 +516,7 @@ function GameScreen() {
 
                 {/* Central Top Timer Ring Emblem */}
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-                    <div className={`w-15 h-15 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse" : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"} flex flex-col items-center justify-center text-center transition-all`}>
+                    <div className={`w-14 h-14 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse" : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"} flex flex-col items-center justify-center text-center transition-all`}>
                         <span className={`text-base font-black leading-none ${timeLeft <= 5 ? "text-rose-400" : "text-white"}`}>
                             {timeLeft}
                         </span>
@@ -551,18 +546,18 @@ function GameScreen() {
                     {/* Question Text */}
                     <div className="text-center my-4 sm:my-6">
                         <h2 className="text-xl sm:text-2xl font-black text-white leading-relaxed tracking-wide">
-                            {question.question}
+                            {typeof question.question === "object" ? question.question?.text : (question.questionText || question.question)}
                         </h2>
                         <div className="flex items-center justify-center space-x-2 text-purple-400/50 my-3">
-                            <span className="w-8 h-2px bg-purple-500/30"></span>
+                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
                             <span className="text-amber-400 text-xs">⭐</span>
-                            <span className="w-8 h-2px bg-purple-500/30"></span>
+                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
                         </div>
                     </div>
 
-                    {/* Shuffled Options List */}
+                    {/* Options List */}
                     <div className="space-y-3 my-6">
-                        {(displayOptions.length > 0 ? displayOptions : question.options)?.map((option, idx) => {
+                        {(question.options || [])?.map((option, idx) => {
                             const letter = optionLetters[idx % optionLetters.length];
                             const isSelected = selectedAnswer === option;
 
@@ -660,7 +655,7 @@ function GameScreen() {
                                         }`}
                                 >
                                     {isCurrent && (
-                                        <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-md uppercase">
+                                        <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase">
                                             YOU
                                         </span>
                                     )}

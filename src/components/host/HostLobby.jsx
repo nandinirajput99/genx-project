@@ -18,7 +18,10 @@ export default function HostLobby({ quizId }) {
   const game = useSelector((state) => state.game);
   const players = useSelector((state) => state.players.players);
   const reduxQuizId = useSelector((state) => state.quiz.quizId);
-  const [pin, setPin] = useState("");
+  const reduxQuestions = useSelector((state) => state.quiz.questions);
+  const [pin, setPin] = useState(
+    () => game.pin || localStorage.getItem("hostPin") || ""
+  );
   const [loading, setLoading] = useState(true);
   const [mockFinished, setMockFinished] = useState(false);
 
@@ -30,6 +33,9 @@ export default function HostLobby({ quizId }) {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
       const ctx = new AudioContext();
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
       
       const playNote = (freq, startTime, duration, type = "triangle") => {
         const osc = ctx.createOscillator();
@@ -88,11 +94,14 @@ export default function HostLobby({ quizId }) {
       return;
     }
 
-    const generatedPin = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    const existingPin = game.pin || localStorage.getItem("hostPin");
+    const generatedPin =
+      existingPin ||
+      Math.floor(100000 + Math.random() * 900000).toString();
 
     setPin(generatedPin);
+    localStorage.setItem("hostPin", generatedPin);
+    localStorage.setItem("gamePin", generatedPin);
 
     const createGame = async () => {
       try {
@@ -100,7 +109,10 @@ export default function HostLobby({ quizId }) {
         const quizRef = doc(db, "quizzes", activeQuizId);
         const quizSnap = await getDoc(quizRef);
 
-        const quizData = quizSnap.exists() ? quizSnap.data() : { questions: [] };
+        let questionsList = quizSnap.exists() ? (quizSnap.data().questions || []) : [];
+        if (questionsList.length === 0 && reduxQuestions && reduxQuestions.length > 0) {
+          questionsList = reduxQuestions;
+        }
 
         // 2. SAME PIN KO FIREBASE GAME ID BANAO
         const gameData = {
@@ -112,13 +124,10 @@ export default function HostLobby({ quizId }) {
           questionStartedAt: null,
           answerRevealed: false,
           players: [],
-          questions: quizData.questions || []
+          questions: questionsList,
         };
 
-        await setDoc(
-          doc(db, "games", generatedPin),
-          gameData
-        );
+        await setDoc(doc(db, "games", generatedPin), gameData, { merge: true });
 
         // 3. SAME PIN REDUX ME BHI SAVE KARO
         dispatch(
@@ -134,8 +143,6 @@ export default function HostLobby({ quizId }) {
         );
 
         setLoading(false);
-
-        console.log("Game created with PIN:", generatedPin);
       } catch (err) {
         console.error("Error starting game session:", err);
         setLoading(false);
@@ -143,7 +150,7 @@ export default function HostLobby({ quizId }) {
     };
 
     createGame();
-  }, [activeQuizId, dispatch]);
+  }, [activeQuizId, dispatch, reduxQuestions, game.pin]);
 
   // 4. FIREBASE SE PLAYERS REAL-TIME LISTEN KARO
   useEffect(() => {
@@ -278,7 +285,7 @@ export default function HostLobby({ quizId }) {
           )}
 
           {/* Leaderboard Position List */}
-          <div className="bg-black/25 rounded-2xl p-6 mb-8 max-h-300px overflow-y-auto border border-white/5">
+          <div className="bg-black/25 rounded-2xl p-6 mb-8 max-h-[300px] overflow-y-auto border border-white/5">
             <h4 className="text-lg font-bold text-gray-300 mb-4 text-left border-b border-white/10 pb-2">
               Leaderboard Rankings & Rewards
             </h4>

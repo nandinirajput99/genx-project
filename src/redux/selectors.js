@@ -1,15 +1,16 @@
 export const selectQuestions = (state) =>
-  state.quiz.questions;
+  state.quiz?.questions || [];
+
 export const selectGameStatus = (state) =>
-  state.game.status;
+  state.game?.status || "waiting";
 
 export const selectPlayers = (state) =>
-  state.players.players;
+  state.players?.players || [];
 
 export const selectCurrentQuestionIndex = (state) =>
-  state.game.currentQuestionIndex;
+  state.game?.currentQuestionIndex || 0;
 
 export const selectLeaderboard = (state) =>
-  [...state.players.players].sort(
-    (a, b) => b.score - a.score
+  [...(state.players?.players || [])].sort(
+    (a, b) => (b.score || 0) - (a.score || 0)
   );
