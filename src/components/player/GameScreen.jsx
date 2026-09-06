@@ -414,17 +414,23 @@ function GameScreen() {
             (acc, p) => acc + (p.wrongCount || (p.answered && !p.correct ? 1 : 0)),
             0
         );
+        const totalUnanswered = sorted.reduce(
+            (acc, p) => acc + (p.unansweredCount || (!p.answered ? 1 : 0)),
+            0
+        );
 
         return (
             <Podium
                 winners={sorted.map((p) => ({
                     name: p.nickname,
                     score: p.score || 0,
-                    correctCount: p.correctCount,
-                    wrongCount: p.wrongCount,
+                    correctCount: p.correctCount || (p.correct ? 1 : 0),
+                    wrongCount: p.wrongCount || (p.answered && !p.correct ? 1 : 0),
+                    unansweredCount: p.unansweredCount || (!p.answered ? 1 : 0),
                 }))}
                 totalCorrect={totalCorrect}
                 totalWrong={totalWrong}
+                totalUnanswered={totalUnanswered}
             />
         );
     }

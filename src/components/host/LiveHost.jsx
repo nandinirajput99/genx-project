@@ -107,7 +107,9 @@ export default function LiveHost() {
           return player;
         }
 
-        const isCorrect = !!(player.answered && player.answer === correctOption);
+        const wasAnswered = !!player.answered;
+        const isCorrect = wasAnswered && player.answer === correctOption;
+        const isWrong = wasAnswered && !isCorrect;
         const remainingTime = player.timeRemaining !== undefined ? player.timeRemaining : 0;
         const speedBonus = isCorrect && duration > 0 ? Math.max(0, Math.round((remainingTime / duration) * 500)) : 0;
         const pointsToAdd = isCorrect ? 500 + speedBonus : 0;
@@ -117,13 +119,62 @@ export default function LiveHost() {
           correct: isCorrect,
           score: (player.score || 0) + pointsToAdd,
           correctCount: (player.correctCount || 0) + (isCorrect ? 1 : 0),
-          wrongCount: (player.wrongCount || 0) + (isCorrect ? 0 : 1),
+          wrongCount: (player.wrongCount || 0) + (isWrong ? 1 : 0),
+          unansweredCount: (player.unansweredCount || 0) + (!wasAnswered ? 1 : 0),
           scoredForQuestion: game.currentQuestionIndex,
         };
       });
     },
     [correctOption, game.currentQuestionIndex]
   );
+
+  // Auto-answer for Demo Bots so simulated players actively participate during live testing
+  useEffect(() => {
+    if (!isTimerActive || !activePin || game.answerRevealed) return;
+
+    const botPlayers = players.filter((p) => p.id?.startsWith("bot_") && !p.answered);
+    if (botPlayers.length === 0) return;
+
+    const timerId = setTimeout(async () => {
+      if (!activePin) return;
+
+      const rawOptions = currentQ.options || [
+        ...(currentQ.incorrectAnswers || []),
+        currentQ.correctAnswer,
+      ];
+
+      if (!rawOptions || rawOptions.length === 0) return;
+
+      const otherOptions = rawOptions.filter((opt) => opt !== correctOption);
+
+      const updated = players.map((p) => {
+        if (!p.id?.startsWith("bot_") || p.answered) return p;
+
+        // 70% chance bot picks correct answer
+        const chooseCorrect = Math.random() < 0.70;
+        const chosen = chooseCorrect || otherOptions.length === 0
+          ? correctOption
+          : otherOptions[Math.floor(Math.random() * otherOptions.length)];
+
+        return {
+          ...p,
+          answer: chosen,
+          answered: true,
+          timeRemaining: Math.max(2, Math.floor(Math.random() * 10) + 5),
+        };
+      });
+
+      try {
+        await updateDoc(doc(db, "games", activePin), {
+          players: updated,
+        });
+      } catch (e) {
+        console.error("Error auto-answering bots:", e);
+      }
+    }, 2800);
+
+    return () => clearTimeout(timerId);
+  }, [isTimerActive, activePin, game.currentQuestionIndex, game.answerRevealed, players, correctOption, currentQ]);
 
   // When timer reaches 0, auto-reveal the answer
   useEffect(() => {
@@ -322,17 +373,23 @@ export default function LiveHost() {
       (acc, p) => acc + (p.wrongCount || (p.answered && !p.correct ? 1 : 0)),
       0
     );
+    const totalUnanswered = sortedPlayers.reduce(
+      (acc, p) => acc + (p.unansweredCount || (!p.answered ? 1 : 0)),
+      0
+    );
 
     return (
       <Podium
         winners={sortedPlayers.map((p) => ({
           name: p.nickname,
           score: p.score || 0,
-          correctCount: p.correctCount,
-          wrongCount: p.wrongCount,
+          correctCount: p.correctCount || (p.correct ? 1 : 0),
+          wrongCount: p.wrongCount || (p.answered && !p.correct ? 1 : 0),
+          unansweredCount: p.unansweredCount || (!p.answered ? 1 : 0),
         }))}
         totalCorrect={totalCorrect}
         totalWrong={totalWrong}
+        totalUnanswered={totalUnanswered}
       />
     );
   }

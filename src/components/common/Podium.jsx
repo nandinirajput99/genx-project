@@ -67,7 +67,7 @@ const ConfettiCanvas = () => {
     return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-50" />;
 };
 
-function Podium({ winners = [], totalCorrect, totalWrong }) {
+function Podium({ winners = [], totalCorrect, totalWrong, totalUnanswered }) {
     const displayPlayers = winners && winners.length > 0 ? winners : [];
 
     const first = displayPlayers[0];
@@ -143,7 +143,7 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
         playPodiumCelebration();
     }, []);
 
-    // Overall correct and wrong answers calculation
+    // Overall correct, wrong, and unanswered answers calculation
     const correctCount =
         totalCorrect !== undefined
             ? totalCorrect
@@ -164,8 +164,17 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
                 0
             );
 
-    const totalAnswers = correctCount + wrongCount;
-    const accuracy = totalAnswers > 0 ? Math.round((correctCount / totalAnswers) * 100) : 0;
+    const unansweredCount =
+        totalUnanswered !== undefined
+            ? totalUnanswered
+            : winners.reduce(
+                (acc, player) =>
+                    acc + (player.unansweredCount ?? (!player.answered ? 1 : 0)),
+                0
+            );
+
+    const totalSubmitted = correctCount + wrongCount;
+    const accuracy = totalSubmitted > 0 ? Math.round((correctCount / totalSubmitted) * 100) : 0;
 
     if (displayPlayers.length === 0) {
         return (
@@ -373,39 +382,55 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
                         Total answers submitted across all quiz rounds by all players:
                     </p>
 
-                    <div className="flex justify-center gap-4 sm:gap-6 w-full max-w-md">
+                    <div className="flex justify-center gap-3 sm:gap-4 w-full max-w-lg">
 
                         {/* Correct Answers Box (Green) */}
-                        <div className="flex-1 bg-emerald-500/20 border-2 border-emerald-400 rounded-2xl p-4 sm:p-5 text-center shadow-[0_0_25px_rgba(52,211,153,0.3)] backdrop-blur-md">
-                            <div className="text-3xl sm:text-4xl mb-1">✅</div>
-                            <div className="text-xs sm:text-sm font-bold text-emerald-200 uppercase tracking-wider">
+                        <div className="flex-1 bg-emerald-500/20 border-2 border-emerald-400 rounded-2xl p-3.5 sm:p-5 text-center shadow-[0_0_25px_rgba(52,211,153,0.3)] backdrop-blur-md">
+                            <div className="text-2xl sm:text-4xl mb-1">✅</div>
+                            <div className="text-[11px] sm:text-xs font-bold text-emerald-200 uppercase tracking-wider">
                                 Correct Answers
                             </div>
-                            <div className="text-3xl sm:text-4xl font-black text-emerald-300 my-1">
+                            <div className="text-2xl sm:text-4xl font-black text-emerald-300 my-1">
                                 {correctCount}
                             </div>
-                            <div className="text-[11px] font-semibold text-emerald-300/80 bg-emerald-950/60 rounded-lg py-1 px-2 mt-1">
+                            <div className="text-[10px] sm:text-[11px] font-semibold text-emerald-300/80 bg-emerald-950/60 rounded-lg py-1 px-1.5 mt-1">
                                 Right Answers Given
                             </div>
                         </div>
 
                         {/* Wrong Answers Box (Red) */}
-                        <div className="flex-1 bg-rose-500/20 border-2 border-rose-400 rounded-2xl p-4 sm:p-5 text-center shadow-[0_0_25px_rgba(244,63,94,0.3)] backdrop-blur-md">
-                            <div className="text-3xl sm:text-4xl mb-1">❌</div>
-                            <div className="text-xs sm:text-sm font-bold text-rose-200 uppercase tracking-wider">
+                        <div className="flex-1 bg-rose-500/20 border-2 border-rose-400 rounded-2xl p-3.5 sm:p-5 text-center shadow-[0_0_25px_rgba(244,63,94,0.3)] backdrop-blur-md">
+                            <div className="text-2xl sm:text-4xl mb-1">❌</div>
+                            <div className="text-[11px] sm:text-xs font-bold text-rose-200 uppercase tracking-wider">
                                 Wrong Answers
                             </div>
-                            <div className="text-3xl sm:text-4xl font-black text-rose-300 my-1">
+                            <div className="text-2xl sm:text-4xl font-black text-rose-300 my-1">
                                 {wrongCount}
                             </div>
-                            <div className="text-[11px] font-semibold text-rose-300/80 bg-rose-950/60 rounded-lg py-1 px-2 mt-1">
-                                Mistakes / Missed
+                            <div className="text-[10px] sm:text-[11px] font-semibold text-rose-300/80 bg-rose-950/60 rounded-lg py-1 px-1.5 mt-1">
+                                Incorrect Choices
                             </div>
                         </div>
 
+                        {/* Unanswered / Timed Out Box (Amber) */}
+                        {unansweredCount > 0 && (
+                            <div className="flex-1 bg-amber-500/20 border-2 border-amber-400 rounded-2xl p-3.5 sm:p-5 text-center shadow-[0_0_25px_rgba(251,191,36,0.3)] backdrop-blur-md">
+                                <div className="text-2xl sm:text-4xl mb-1">⏳</div>
+                                <div className="text-[11px] sm:text-xs font-bold text-amber-200 uppercase tracking-wider">
+                                    Missed / Timeout
+                                </div>
+                                <div className="text-2xl sm:text-4xl font-black text-amber-300 my-1">
+                                    {unansweredCount}
+                                </div>
+                                <div className="text-[10px] sm:text-[11px] font-semibold text-amber-300/80 bg-amber-950/60 rounded-lg py-1 px-1.5 mt-1">
+                                    No Answer Submitted
+                                </div>
+                            </div>
+                        )}
+
                     </div>
 
-                    {totalAnswers > 0 && (
+                    {totalSubmitted > 0 ? (
                         <div className="mt-4 flex flex-wrap items-center justify-center gap-2 bg-[#1b103e]/80 border border-purple-500/30 px-4 py-1.5 rounded-full text-xs font-semibold text-purple-200 shadow-sm">
                             <span>🎯</span>
                             <span>Overall Accuracy:</span>
@@ -413,8 +438,12 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
                                 {accuracy}%
                             </span>
                             <span className="text-purple-300/80 text-[11px]">
-                                ({correctCount} of {totalAnswers} total answers correct)
+                                ({correctCount} of {totalSubmitted} submitted answer{totalSubmitted > 1 ? "s" : ""} correct)
                             </span>
+                        </div>
+                    ) : (
+                        <div className="mt-4 text-xs text-purple-300/80">
+                            No answers were submitted during this quiz session.
                         </div>
                     )}
 
