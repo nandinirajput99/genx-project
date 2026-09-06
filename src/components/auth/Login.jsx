@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
 function Login() {
@@ -6,6 +6,12 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (localStorage.getItem("userLoggedIn") === "true") {
+      navigate("/game-options");
+    }
+  }, [navigate]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -18,6 +24,10 @@ function Login() {
 
     localStorage.setItem("userLoggedIn", "true");
     localStorage.setItem("userEmail", email);
+    const derivedNick = email.includes("@") ? email.split("@")[0] : email;
+    if (!localStorage.getItem("userNickname")) {
+      localStorage.setItem("userNickname", derivedNick);
+    }
     navigate("/game-options");
   };
 

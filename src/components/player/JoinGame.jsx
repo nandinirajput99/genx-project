@@ -13,7 +13,9 @@ import {
 
 function JoinGame() {
     const [pin, setPin] = useState("");
-    const [nickname, setNickname] = useState("");
+    const [nickname, setNickname] = useState(
+        localStorage.getItem("userNickname") || ""
+    );
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -40,6 +42,7 @@ function JoinGame() {
             const gameSnap = await getDoc(gameRef);
             if (!gameSnap.exists()) {
                 setError("Invalid Game PIN. Please check and try again.");
+                setLoading(false);
                 return;
             }
 
@@ -47,6 +50,7 @@ function JoinGame() {
 
             if (gameData.status === "finished") {
                 setError("This game session has already ended.");
+                setLoading(false);
                 return;
             }
 

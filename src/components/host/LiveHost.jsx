@@ -365,31 +365,14 @@ export default function LiveHost() {
 
   // Finished state: Podium
   if (status === "finished") {
-    const totalCorrect = sortedPlayers.reduce(
-      (acc, p) => acc + (p.correctCount || (p.correct ? 1 : 0)),
-      0
-    );
-    const totalWrong = sortedPlayers.reduce(
-      (acc, p) => acc + (p.wrongCount || (p.answered && !p.correct ? 1 : 0)),
-      0
-    );
-    const totalUnanswered = sortedPlayers.reduce(
-      (acc, p) => acc + (p.unansweredCount || (!p.answered ? 1 : 0)),
-      0
-    );
-
     return (
       <Podium
         winners={sortedPlayers.map((p) => ({
+          id: p.id,
           name: p.nickname,
+          nickname: p.nickname,
           score: p.score || 0,
-          correctCount: p.correctCount || (p.correct ? 1 : 0),
-          wrongCount: p.wrongCount || (p.answered && !p.correct ? 1 : 0),
-          unansweredCount: p.unansweredCount || (!p.answered ? 1 : 0),
         }))}
-        totalCorrect={totalCorrect}
-        totalWrong={totalWrong}
-        totalUnanswered={totalUnanswered}
       />
     );
   }
@@ -441,7 +424,7 @@ export default function LiveHost() {
           </div>
         </div>
 
-        {/* Question & Options */}
+        {/* Question & Options (Kahoot 4-Shapes) */}
         <div className="mb-8 text-center">
           <h3 className="text-xl sm:text-2xl font-black mb-6 text-white leading-relaxed">
             {questionText || "Loading question..."}
@@ -449,7 +432,13 @@ export default function LiveHost() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {currentQ.options?.map((opt, idx) => {
-              const letter = optionLetters[idx % optionLetters.length];
+              const kahootShapes = [
+                { shape: "▲", badge: "bg-[#e21b3c] text-white", cardDefault: "bg-[#e21b3c]/15 border-[#e21b3c]/40 text-white" },
+                { shape: "◆", badge: "bg-[#1368ce] text-white", cardDefault: "bg-[#1368ce]/15 border-[#1368ce]/40 text-white" },
+                { shape: "●", badge: "bg-[#d89e00] text-slate-950 font-black", cardDefault: "bg-[#d89e00]/15 border-[#d89e00]/40 text-white" },
+                { shape: "■", badge: "bg-[#26890c] text-white", cardDefault: "bg-[#26890c]/15 border-[#26890c]/40 text-white" },
+              ];
+              const shapeMeta = kahootShapes[idx % kahootShapes.length];
               const isCorrectOpt = opt === correctOption;
 
               return (
@@ -457,21 +446,21 @@ export default function LiveHost() {
                   key={idx}
                   className={`p-4 rounded-2xl font-bold flex items-center justify-between border transition-all ${
                     isCorrectOpt
-                      ? "bg-emerald-950/80 border-emerald-400 text-emerald-200 shadow-[0_0_20px_rgba(52,211,153,0.3)]"
-                      : "bg-[#1b113e] border-purple-800/60 text-purple-200"
+                      ? "bg-emerald-950/80 border-emerald-400 text-emerald-200 shadow-[0_0_20px_rgba(52,211,153,0.3)] ring-2 ring-emerald-400/40"
+                      : `${shapeMeta.cardDefault} text-purple-100`
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${
-                      isCorrectOpt ? "bg-emerald-400 text-black" : "bg-purple-900 text-purple-300"
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${
+                      isCorrectOpt ? "bg-emerald-400 text-black" : shapeMeta.badge
                     }`}>
-                      {letter}
+                      {isCorrectOpt ? "✓" : shapeMeta.shape}
                     </span>
-                    <span className="text-sm sm:text-base text-left">{opt}</span>
+                    <span className="text-sm sm:text-base text-left truncate">{opt}</span>
                   </div>
 
                   {isCorrectOpt && (
-                    <span className="text-xs bg-emerald-400 text-black px-2 py-0.5 rounded font-black">
+                    <span className="text-[10px] bg-emerald-400 text-black px-2 py-0.5 rounded font-black shrink-0 ml-2">
                       CORRECT
                     </span>
                   )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
 function SignUp() {
@@ -7,6 +7,12 @@ function SignUp() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (localStorage.getItem("userLoggedIn") === "true") {
+      navigate("/game-options");
+    }
+  }, [navigate]);
 
   const handleSignUp = (e) => {
     e.preventDefault();

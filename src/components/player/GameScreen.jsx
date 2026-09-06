@@ -400,37 +400,20 @@ function GameScreen() {
         );
     }
 
-    // Game finished: Display Podium with overall stats
+    // Game finished: Display Podium with winners
     if (gameData.status === "finished") {
         const sorted = [...(gameData.players || [])].sort(
             (a, b) => (b.score || 0) - (a.score || 0)
         );
 
-        const totalCorrect = sorted.reduce(
-            (acc, p) => acc + (p.correctCount || (p.correct ? 1 : 0)),
-            0
-        );
-        const totalWrong = sorted.reduce(
-            (acc, p) => acc + (p.wrongCount || (p.answered && !p.correct ? 1 : 0)),
-            0
-        );
-        const totalUnanswered = sorted.reduce(
-            (acc, p) => acc + (p.unansweredCount || (!p.answered ? 1 : 0)),
-            0
-        );
-
         return (
             <Podium
                 winners={sorted.map((p) => ({
+                    id: p.id,
                     name: p.nickname,
+                    nickname: p.nickname,
                     score: p.score || 0,
-                    correctCount: p.correctCount || (p.correct ? 1 : 0),
-                    wrongCount: p.wrongCount || (p.answered && !p.correct ? 1 : 0),
-                    unansweredCount: p.unansweredCount || (!p.answered ? 1 : 0),
                 }))}
-                totalCorrect={totalCorrect}
-                totalWrong={totalWrong}
-                totalUnanswered={totalUnanswered}
             />
         );
     }
@@ -494,8 +477,8 @@ function GameScreen() {
                 </div>
             </div>
 
-            {/* Main Glassmorphism Question Card */}
-            <div className="w-full max-w-xl relative my-auto z-10">
+            {/* Main Glassmorphism Question Card (Kahoot Style) */}
+            <div className="w-full max-w-2xl relative my-auto z-10">
                 {/* Central Top Timer Ring Emblem */}
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
                     <div
@@ -516,11 +499,11 @@ function GameScreen() {
                     </div>
                 </div>
 
-                <div className="bg-[#120a2e]/95 border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(147,51,234,0.35)] backdrop-blur-xl relative z-10 pt-10">
+                <div className="bg-[#120a2e]/95 border-2 border-purple-500/40 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(147,51,234,0.25)] backdrop-blur-xl relative z-10 pt-10">
                     {/* Top Score & Question Info */}
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-center mb-5">
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                            <span className="text-[10px] font-black text-purple-300 uppercase tracking-widest">
                                 Question
                             </span>
                             <span className="text-lg font-black text-amber-300">
@@ -532,7 +515,7 @@ function GameScreen() {
                         </div>
 
                         <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                            <span className="text-[10px] font-black text-purple-300 uppercase tracking-widest">
                                 Your Score
                             </span>
                             <span className="text-lg font-black text-amber-300 flex items-center gap-1">
@@ -547,36 +530,44 @@ function GameScreen() {
                             {questionText}
                         </h2>
                         <div className="flex items-center justify-center space-x-2 text-purple-400/50 my-3">
-                            <span className="w-8 h-[ 2px] bg-purple-500/30"></span>
+                            <span className="w-8 h-0.5 bg-purple-500/30"></span>
                             <span className="text-amber-400 text-xs">⭐</span>
-                            <span className="w-8 h-[ 2px] bg-purple-500/30"></span>
+                            <span className="w-8 h-0.5 bg-purple-500/30"></span>
                         </div>
                     </div>
 
-                    {/* Options List (Deterministic order matching host) */}
-                    <div className="space-y-3 my-6">
+                    {/* Kahoot 4-Shape Options Grid (Responsive 2x2) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 my-6">
                         {question.options?.map((option, idx) => {
+                            const kahootShapes = [
+                                { shape: "▲", badge: "bg-[#e21b3c] text-white", cardDefault: "bg-[#e21b3c]/15 hover:bg-[#e21b3c]/25 border-[#e21b3c]/40 text-white" },
+                                { shape: "◆", badge: "bg-[#1368ce] text-white", cardDefault: "bg-[#1368ce]/15 hover:bg-[#1368ce]/25 border-[#1368ce]/40 text-white" },
+                                { shape: "●", badge: "bg-[#d89e00] text-slate-950 font-black", cardDefault: "bg-[#d89e00]/15 hover:bg-[#d89e00]/25 border-[#d89e00]/40 text-white" },
+                                { shape: "■", badge: "bg-[#26890c] text-white", cardDefault: "bg-[#26890c]/15 hover:bg-[#26890c]/25 border-[#26890c]/40 text-white" },
+                            ];
+                            const shapeMeta = kahootShapes[idx % kahootShapes.length];
                             const letter = optionLetters[idx % optionLetters.length];
                             const isSelected = selectedAnswer === option;
                             const isCorrectAnswer = option === correctOption;
 
-                            // Highlight correct answer in green and incorrect selected in red once revealed
-                            let btnStyle = "bg-[#1b113e] border-purple-800/60 hover:border-purple-500/80 text-white";
-                            let badgeStyle = "bg-purple-900/80 text-purple-200 border border-purple-500/30";
+                            // Kahoot option state styling
+                            let btnStyle = shapeMeta.cardDefault;
+                            let badgeStyle = shapeMeta.badge;
 
                             if (isAnswerRevealed) {
                                 if (isCorrectAnswer) {
-                                    btnStyle = "bg-emerald-950/90 border-2 border-emerald-400 text-white shadow-[0_0_20px_rgba(52,211,153,0.5)]";
+                                    btnStyle = "bg-emerald-950/90 border-2 border-emerald-400 text-white shadow-[0_0_25px_rgba(52,211,153,0.5)] ring-2 ring-emerald-400/40";
                                     badgeStyle = "bg-emerald-400 text-black";
                                 } else if (isSelected && !isCorrectAnswer) {
                                     btnStyle = "bg-rose-950/90 border-2 border-rose-500 text-rose-200 shadow-[0_0_20px_rgba(244,63,94,0.4)]";
                                     badgeStyle = "bg-rose-500 text-white";
                                 } else {
-                                    btnStyle = "bg-[#1b113e]/40 border-purple-900/40 text-purple-400/40";
+                                    btnStyle = "bg-[#1b113e]/40 border-purple-900/30 text-purple-400/40 opacity-40";
+                                    badgeStyle = "bg-purple-900/40 text-purple-400";
                                 }
                             } else if (isSelected) {
-                                btnStyle = "bg-indigo-900/90 border-2 border-indigo-400 text-white shadow-[0_0_20px_rgba(129,140,248,0.4)]";
-                                badgeStyle = "bg-indigo-400 text-black";
+                                btnStyle = "bg-[#261b55] border-2 border-amber-400 text-white shadow-[0_0_25px_rgba(251,191,36,0.35)] ring-2 ring-amber-400/30";
+                                badgeStyle = "bg-amber-400 text-black";
                             }
 
                             return (
@@ -584,35 +575,40 @@ function GameScreen() {
                                     key={option}
                                     onClick={() => handleAnswer(option)}
                                     disabled={submitted || timeLeft === 0 || isAnswerRevealed}
-                                    className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all duration-200 text-left cursor-pointer border ${btnStyle} ${submitted || timeLeft === 0 || isAnswerRevealed ? "cursor-default" : ""
+                                    className={`w-full min-h-[64px] flex items-center justify-between p-3.5 sm:p-4 rounded-2xl font-bold transition-all duration-200 text-left border cursor-pointer active:scale-[0.98] ${btnStyle} ${submitted || timeLeft === 0 || isAnswerRevealed ? "cursor-default active:scale-100" : ""
                                         }`}
                                 >
-                                    <div className="flex items-center space-x-3.5">
-                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow-md ${badgeStyle}`}>
-                                            {letter}
+                                    <div className="flex items-center space-x-3 min-w-0">
+                                        {/* Kahoot Shape Icon Badge */}
+                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-base shrink-0 shadow-sm ${badgeStyle}`}>
+                                            {shapeMeta.shape}
                                         </div>
-                                        <span className="text-sm sm:text-base font-semibold">{option}</span>
+                                        <span className="text-sm sm:text-base font-bold truncate">
+                                            {option}
+                                        </span>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                         {isAnswerRevealed && isCorrectAnswer && (
-                                            <span className="text-xs bg-emerald-400 text-black font-black px-2 py-0.5 rounded">
+                                            <span className="text-[10px] bg-emerald-400 text-black font-black px-2 py-0.5 rounded shadow-sm">
                                                 CORRECT
                                             </span>
                                         )}
                                         {isAnswerRevealed && isSelected && !isCorrectAnswer && (
-                                            <span className="text-xs bg-rose-500 text-white font-black px-2 py-0.5 rounded">
+                                            <span className="text-[10px] bg-rose-500 text-white font-black px-2 py-0.5 rounded shadow-sm">
                                                 WRONG
                                             </span>
                                         )}
-                                        <div
-                                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
-                                                    ? "border-amber-400 bg-amber-400 text-black"
-                                                    : "border-purple-600/60 bg-purple-950/40"
-                                                }`}
-                                        >
-                                            {isSelected && <span className="text-xs font-black">✓</span>}
-                                        </div>
+                                        {!isAnswerRevealed && (
+                                            <div
+                                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
+                                                        ? "border-amber-400 bg-amber-400 text-black"
+                                                        : "border-purple-600/40 bg-purple-950/20"
+                                                    }`}
+                                            >
+                                                {isSelected && <span className="text-[10px] font-black">✓</span>}
+                                            </div>
+                                        )}
                                     </div>
                                 </button>
                             );
@@ -624,7 +620,7 @@ function GameScreen() {
                         <button
                             onClick={submitAnswer}
                             disabled={selectedAnswer === "" || submitted || timeLeft === 0}
-                            className="w-full mt-4 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor- pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
+                            className="w-full mt-2 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-3.5 sm:py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.4)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
                         >
                             <span>🚀</span>
                             <span>{submitted ? "ANSWER SUBMITTED" : timeLeft === 0 ? "TIME EXPIRED" : "SUBMIT ANSWER"}</span>
@@ -634,7 +630,7 @@ function GameScreen() {
                     {/* Answer Feedback Banner */}
                     {isAnswerRevealed ? (
                         <div
-                            className={`mt-4 text-center text-xs sm:text-sm font-extrabold py-3 px-4 rounded-xl border ${!submitted
+                            className={`mt-4 text-center text-xs sm:text-sm font-extrabold py-3 px-4 rounded-2xl border ${!submitted
                                     ? "text-amber-300 bg-amber-950/60 border-amber-500/40"
                                     : isCorrect
                                         ? "text-emerald-300 bg-emerald-950/70 border-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]"

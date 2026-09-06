@@ -153,9 +153,9 @@ function PlayerLobby() {
             {/* Game PIN Box */}
             <div className="flex flex-col items-center justify-center mb-6">
               <div className="flex items-center space-x-3 text-purple-300/80 text-xs font-semibold tracking-widest uppercase mb-2">
-                <span className="w-6 h- [2px] bg-linear-to-r from-transparent to-purple-400/60"></span>
+                <span className="w-6 h-[2px] bg-linear-to-r from-transparent to-purple-400/60"></span>
                 <span>Game PIN</span>
-                <span className="w-6 h- [2px] bg-linear-to-l from-transparent to-purple-400/60"></span>
+                <span className="w-6 h-[2px] bg-linear-to-l from-transparent to-purple-400/60"></span>
               </div>
 
               <div className="w-full bg-[#1b113e] border-2 border-purple-500/60 rounded-2xl py-4 px-6 text-center shadow-[0_0_30px_rgba(168,85,247,0.3)] relative overflow-hidden group">
