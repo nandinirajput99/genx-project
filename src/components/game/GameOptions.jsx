@@ -46,7 +46,7 @@ function GameOptions() {
         {/* Join a Game Card */}
         <div className="bg-[#120a2e]/90 border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(147,51,234,0.3)] backdrop-blur-xl flex flex-col justify-between items-center text-center group hover:border-purple-400 hover:scale-[1.02] transition-all duration-300">
           <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-b from-purple-700 to-indigo-900 border border-purple-400/60 flex items-center justify-center text-3xl shadow-lg mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to -b from-purple-700 to-indigo-900 border border-purple-400/60 flex items-center justify-center text-3xl shadow-lg mb-4 group-hover:scale-110 transition-transform">
               🎮
             </div>
 
@@ -72,7 +72,7 @@ function GameOptions() {
         {/* Host a Game Card */}
         <div className="bg-[#120a2e]/90 border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(147,51,234,0.3)] backdrop-blur-xl flex flex-col justify-between items-center text-center group hover:border-purple-400 hover:scale-[1.02] transition-all duration-300">
           <div className="flex flex-col items-center">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-b from-indigo-700 to-purple-900 border border-purple-400/60 flex items-center justify-center text-3xl shadow-lg mb-4 group-hover:scale-110 transition-transform">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to- b from-indigo-700 to-purple-900 border border-purple-400/60 flex items-center justify-center text-3xl shadow-lg mb-4 group-hover:scale-110 transition-transform">
               🏆
             </div>
 

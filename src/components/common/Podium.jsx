@@ -68,11 +68,7 @@ const ConfettiCanvas = () => {
 };
 
 function Podium({ winners = [], totalCorrect, totalWrong }) {
-    const displayPlayers = winners.length > 0 ? winners : [
-        { nickname: "Champion Tom 👑", score: 5950 },
-        { nickname: "Smart Ansh", score: 1600 },
-        { nickname: "Player trtr", score: 0 },
-    ];
+    const displayPlayers = winners && winners.length > 0 ? winners : [];
 
     const first = displayPlayers[0];
     const second = displayPlayers[1];
@@ -170,6 +166,26 @@ function Podium({ winners = [], totalCorrect, totalWrong }) {
 
     const totalAnswers = correctCount + wrongCount;
     const accuracy = totalAnswers > 0 ? Math.round((correctCount / totalAnswers) * 100) : 0;
+
+    if (displayPlayers.length === 0) {
+        return (
+            <div className="min-h-screen bg-linear-to-b from-indigo-900 via-purple-900 to-indigo-950 text-white flex flex-col items-center justify-center p-6 text-center select-none">
+                <div className="max-w-md w-full bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl rounded-3xl p-8">
+                    <span className="text-5xl block mb-3">🎮</span>
+                    <h2 className="text-2xl font-black mb-2 text-white">Quiz Battle Finished!</h2>
+                    <p className="text-purple-200 text-sm mb-6">
+                        No players participated in this session yet.
+                    </p>
+                    <Link
+                        to="/host/create"
+                        className="inline-block bg-linear-to-r from-amber-400 to-yellow-500 text-slate-950 font-black px-6 py-3 rounded-xl shadow-lg hover:brightness-110 transition"
+                    >
+                        Host Another Quiz 🚀
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-linear-to-b from-indigo-900 via-purple-900 to-indigo-950 text-white flex flex-col items-center justify-center p-4 sm:p-6 select-none relative overflow-x-hidden">

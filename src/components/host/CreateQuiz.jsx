@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchQuestions, addQuestion, removeQuestion, setQuiz } from "../../redux/quizSlice";
+import { resetGame } from "../../redux/gameSlice";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, setDoc } from "firebase/firestore";
@@ -86,11 +87,21 @@ function CreateQuiz() {
     previousQuestionCount.current = questions.length;
   }, [questions.length]);
 
-  const handleFetchQuestions = () => {
-    dispatch(fetchQuestions());
+  const [selectedCategory, setSelectedCategory] = useState("all");
+
+  const categories = [
+    { id: "all", label: "⚡ All Mixed" },
+    { id: "tech", label: "💻 Tech & Coding" },
+    { id: "science", label: "🚀 Science & Space" },
+    { id: "general", label: "🌍 General Knowledge" },
+    { id: "entertainment", label: "🎬 Pop Culture & Movies" },
+    { id: "history", label: "📜 History & Geography" },
+  ];
+
+  const handleFetchQuestions = (cat = selectedCategory) => {
+    dispatch(fetchQuestions(cat));
   };
-  // 👇 Custom question ke liye states
-  const [mode, setMode] = useState("fetch"); // "fetch" ya "custom"
+  const [mode, setMode] = useState("fetch"); 
   const [customQuestionText, setCustomQuestionText] = useState("");
   const [customOptions, setCustomOptions] = useState(["", "", "", ""]);
   const [correctIndex, setCorrectIndex] = useState(0);
@@ -166,10 +177,7 @@ function CreateQuiz() {
         title: "Default Quiz",
         questions: formattedQuestions,
       }));
-
-      // 🎉 Host quiz success sound
       playSoundOfJoy();
-
       navigate("/host/lobby");
     } catch (err) {
       console.error("Error hosting quiz:", err);
@@ -261,28 +269,56 @@ function CreateQuiz() {
           </div>
         </div>
         {/* Mode Toggle */}
-        <div className="mb-6 flex justify-center gap-3">
+        <div className="mb-4 flex justify-center gap-3">
           <button
             onClick={() => setMode("fetch")}
-            className={`rounded-full px-5 py-2 font-bold text-sm transition ${
+            className={`rounded-full px-5 py-2 font-bold text-sm transition cursor-pointer ${
               mode === "fetch"
-                ? "bg-indigo-500 text-white"
+                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30"
                 : "bg-white/10 text-slate-300 hover:bg-white/20"
             }`}
           >
-            🔄 Fetch from API
+            🔄 Fetch from Bank / API
           </button>
           <button
             onClick={() => setMode("custom")}
-            className={`rounded-full px-5 py-2 font-bold text-sm transition ${
+            className={`rounded-full px-5 py-2 font-bold text-sm transition cursor-pointer ${
               mode === "custom"
-                ? "bg-indigo-500 text-white"
+                ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30"
                 : "bg-white/10 text-slate-300 hover:bg-white/20"
             }`}
           >
             ✍️ Add Your Own
           </button>
         </div>
+
+        {/* Category Pills (Visible when in fetch mode) */}
+        {mode === "fetch" && (
+          <div className="mb-6">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setSelectedCategory(cat.id);
+                    handleFetchQuestions(cat.id);
+                  }}
+                  disabled={loading}
+                  className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition duration-200 border cursor-pointer ${
+                    selectedCategory === cat.id
+                      ? "border-indigo-400 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-105"
+                      : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-center text-xs text-slate-400">
+              💡 Tip: Click any category above or hit <strong>Fetch Questions</strong> to instantly load a 10-question set!
+            </p>
+          </div>
+        )}
 
         {/* Custom Question Form */}
         {mode === "custom" && (
@@ -327,26 +363,49 @@ function CreateQuiz() {
           </div>
         )}
 
-       
-
         {/* Loading */}
         {loading && (
-          <div className="mb-6 rounded-2xl border border-blue-400/20 bg-blue-500/10 p-5 text-center backdrop-blur-md">
+          <div className="mb-6 rounded-2xl border border-blue-400/20 bg-blue-500/10 p-5 text-center backdrop-blur-md animate-pulse">
             <div className="flex items-center justify-center gap-3 text-blue-200">
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-300/30 border-t-blue-300" />
               <span className="font-semibold">
-                Preparing awesome questions...
+                Preparing awesome questions for you...
               </span>
             </div>
           </div>
         )}
 
-        {/* Error */}
+        {/* Error Fallback */}
         {error && (
           <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-500/10 p-5 text-center backdrop-blur-md">
             <p className="font-semibold text-red-200">
               ⚠️ {error}
             </p>
+            <button
+              onClick={() => handleFetchQuestions()}
+              className="mt-3 rounded-xl bg-red-500/30 hover:bg-red-500/50 px-4 py-2 text-xs font-bold text-white transition"
+            >
+              🔄 Load Offline Questions Bank
+            </button>
+          </div>
+        )}
+
+        {/* Questions Loaded Success Notice */}
+        {!loading && questions.length > 0 && (
+          <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-emerald-200 backdrop-blur-md">
+            <div className="flex items-center gap-2.5 text-sm font-semibold">
+              <span className="text-xl">✨</span>
+              <span>
+                <strong>{questions.length} questions</strong> loaded and ready for battle!
+              </span>
+            </div>
+            <button
+              onClick={() => handleFetchQuestions()}
+              disabled={loading}
+              className="rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/20 active:scale-95 cursor-pointer"
+            >
+              🔀 Fetch Another 10 Questions
+            </button>
           </div>
         )}
 

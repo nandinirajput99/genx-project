@@ -36,7 +36,7 @@ function GameScreen() {
     const resumeAudio = useCallback(() => {
         try {
             if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
-                audioCtxRef.current.resume().catch(() => {});
+                audioCtxRef.current.resume().catch(() => { });
             }
         } catch {
             // ignore
@@ -51,7 +51,7 @@ function GameScreen() {
                 musicTimerRef.current = null;
             }
             if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-                audioCtxRef.current.suspend().catch(() => {});
+                audioCtxRef.current.suspend().catch(() => { });
             }
             return;
         }
@@ -66,7 +66,7 @@ function GameScreen() {
 
             const ctx = audioCtxRef.current;
             if (ctx.state === "suspended") {
-                ctx.resume().catch(() => {});
+                ctx.resume().catch(() => { });
             }
 
             // Peaceful, non-distracting ambient melody (C -> G -> Am -> F)
@@ -93,7 +93,7 @@ function GameScreen() {
             const playSoftNote = () => {
                 if (!ctx) return;
                 if (ctx.state === "suspended") {
-                    ctx.resume().catch(() => {});
+                    ctx.resume().catch(() => { });
                     return;
                 }
                 if (ctx.state !== "running") return;
@@ -188,7 +188,7 @@ function GameScreen() {
             window.removeEventListener("focus", handleGesture);
             if (musicTimerRef.current) clearInterval(musicTimerRef.current);
             if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-                audioCtxRef.current.close().catch(() => {});
+                audioCtxRef.current.close().catch(() => { });
             }
         };
     }, [resumeAudio]);
@@ -493,16 +493,14 @@ function GameScreen() {
                 {/* Central Top Timer Ring Emblem */}
                 <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
                     <div
-                        className={`w-14 h-14 rounded-full bg-[#130a2e] border-4 ${
-                            timeLeft <= 5
+                        className={`w-14 h-14 rounded-full bg-[#130a2e] border-4 ${timeLeft <= 5
                                 ? "border-rose-500 shadow-[0_0_25px_rgba(244,63,94,0.8)] animate-pulse"
                                 : "border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.6)]"
-                        } flex flex-col items-center justify-center text-center transition-all`}
+                            } flex flex-col items-center justify-center text-center transition-all`}
                     >
                         <span
-                            className={`text-base font-black leading-none ${
-                                timeLeft <= 5 ? "text-rose-400" : "text-white"
-                            }`}
+                            className={`text-base font-black leading-none ${timeLeft <= 5 ? "text-rose-400" : "text-white"
+                                }`}
                         >
                             {timeLeft}
                         </span>
@@ -543,9 +541,9 @@ function GameScreen() {
                             {questionText}
                         </h2>
                         <div className="flex items-center justify-center space-x-2 text-purple-400/50 my-3">
-                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
+                            <span className="w-8 h-[ 2px] bg-purple-500/30"></span>
                             <span className="text-amber-400 text-xs">⭐</span>
-                            <span className="w-8 h-[2px] bg-purple-500/30"></span>
+                            <span className="w-8 h-[ 2px] bg-purple-500/30"></span>
                         </div>
                     </div>
 
@@ -580,9 +578,8 @@ function GameScreen() {
                                     key={option}
                                     onClick={() => handleAnswer(option)}
                                     disabled={submitted || timeLeft === 0 || isAnswerRevealed}
-                                    className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all duration-200 text-left cursor-pointer border ${btnStyle} ${
-                                        submitted || timeLeft === 0 || isAnswerRevealed ? "cursor-default" : ""
-                                    }`}
+                                    className={`w-full flex items-center justify-between p-4 rounded-2xl font-bold transition-all duration-200 text-left cursor-pointer border ${btnStyle} ${submitted || timeLeft === 0 || isAnswerRevealed ? "cursor-default" : ""
+                                        }`}
                                 >
                                     <div className="flex items-center space-x-3.5">
                                         <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow-md ${badgeStyle}`}>
@@ -603,11 +600,10 @@ function GameScreen() {
                                             </span>
                                         )}
                                         <div
-                                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                                                isSelected
+                                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
                                                     ? "border-amber-400 bg-amber-400 text-black"
                                                     : "border-purple-600/60 bg-purple-950/40"
-                                            }`}
+                                                }`}
                                         >
                                             {isSelected && <span className="text-xs font-black">✓</span>}
                                         </div>
@@ -622,7 +618,7 @@ function GameScreen() {
                         <button
                             onClick={submitAnswer}
                             disabled={selectedAnswer === "" || submitted || timeLeft === 0}
-                            className="w-full mt-4 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
+                            className="w-full mt-4 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor- pointer disabled:opacity-40 disabled:cursor-not-allowed border border-yellow-200/40"
                         >
                             <span>🚀</span>
                             <span>{submitted ? "ANSWER SUBMITTED" : timeLeft === 0 ? "TIME EXPIRED" : "SUBMIT ANSWER"}</span>
@@ -632,19 +628,18 @@ function GameScreen() {
                     {/* Answer Feedback Banner */}
                     {isAnswerRevealed ? (
                         <div
-                            className={`mt-4 text-center text-xs sm:text-sm font-extrabold py-3 px-4 rounded-xl border ${
-                                !submitted
+                            className={`mt-4 text-center text-xs sm:text-sm font-extrabold py-3 px-4 rounded-xl border ${!submitted
                                     ? "text-amber-300 bg-amber-950/60 border-amber-500/40"
                                     : isCorrect
-                                    ? "text-emerald-300 bg-emerald-950/70 border-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]"
-                                    : "text-rose-300 bg-rose-950/70 border-rose-400/50 shadow-[0_0_15px_rgba(244,63,94,0.3)]"
-                            }`}
+                                        ? "text-emerald-300 bg-emerald-950/70 border-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]"
+                                        : "text-rose-300 bg-rose-950/70 border-rose-400/50 shadow-[0_0_15px_rgba(244,63,94,0.3)]"
+                                }`}
                         >
                             {!submitted
                                 ? "⏰ Time's up! You did not submit an answer in time."
                                 : isCorrect
-                                ? "✅ Great job! Your answer is Correct! 🎉"
-                                : "❌ Oops! Your answer was Incorrect."}
+                                    ? "✅ Great job! Your answer is Correct! 🎉"
+                                    : "❌ Oops! Your answer was Incorrect."}
                         </div>
                     ) : submitted ? (
                         <div className="mt-4 flex items-center justify-center space-x-2 text-xs sm:text-sm font-semibold text-purple-300 animate-pulse">
@@ -680,11 +675,10 @@ function GameScreen() {
                             return (
                                 <div
                                     key={player.id || idx}
-                                    className={`flex items-center space-x-2.5 px-3.5 py-2 rounded-xl border transition-all ${
-                                        isCurrent
+                                    className={`flex items-center space-x-2.5 px-3.5 py-2 rounded-xl border transition-all ${isCurrent
                                             ? "bg-purple-900/90 border-2 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)] relative"
                                             : "bg-[#1b113e]/70 border-purple-800/40 text-purple-200"
-                                    }`}
+                                        }`}
                                 >
                                     {isCurrent && (
                                         <span className="absolute -top-2.5 left-3 bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
@@ -6,10 +6,12 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
+  arrayUnion,
   onSnapshot,
 } from "firebase/firestore";
 
-import { setPlayers } from "../../redux/playersSlice";
+import { setPlayers, addPlayer } from "../../redux/playersSlice";
 import { setGame, setGameStatus, resetGame } from "../../redux/gameSlice";
 
 export default function HostLobby({ quizId }) {
@@ -18,70 +20,49 @@ export default function HostLobby({ quizId }) {
   const game = useSelector((state) => state.game);
   const players = useSelector((state) => state.players.players);
   const reduxQuizId = useSelector((state) => state.quiz.quizId);
+
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(true);
-  const [mockFinished, setMockFinished] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const activeQuizId = quizId || reduxQuizId || "default_quiz";
-  const isFinished = game.status === "finished" || mockFinished;
 
-  const playSoundOfJoy = () => {
+  // Web Audio sound for lobby events
+  const playChime = (type = "join") => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return;
       const ctx = new AudioContext();
-      
-      const playNote = (freq, startTime, duration, type = "triangle") => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, startTime);
-        
-        gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.2, startTime + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-      };
-
       const now = ctx.currentTime;
-      
-      // Joyous arpeggio (C Major)
-      playNote(261.63, now, 0.3, "triangle");       // C4
-      playNote(329.63, now + 0.1, 0.3, "triangle"); // E4
-      playNote(392.00, now + 0.2, 0.3, "triangle"); // G4
-      playNote(523.25, now + 0.3, 0.5, "sine");     // C5
-      
-      // Cheerful fanfare notes
-      playNote(392.00, now + 0.5, 0.2, "sawtooth"); // G4
-      playNote(523.25, now + 0.7, 0.6, "sine");     // C5
-      
-      // Warm chord
-      playNote(329.63, now + 0.7, 0.6, "sine");     // E4
-      playNote(659.25, now + 0.7, 0.6, "sine");     // E5
-    } catch (err) {
-      console.error("Audio error:", err);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      if (type === "join") {
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+      } else {
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.25);
+      }
+
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch {
+      // Audio error ignored
     }
   };
 
+  // 1. Generate PIN and create fresh waiting game session
   useEffect(() => {
-    if (isFinished) {
-      playSoundOfJoy();
-    }
-  }, [isFinished]);
+    dispatch(resetGame());
 
-  const displayPlayers = isFinished && players.length === 0 ? [
-    { nickname: "Champion Shreya 👑", score: 1500 },
-    { nickname: "Smart Anshika", score: 1200 },
-    { nickname: "Awesome Anchal", score: 900 },
-    { nickname: "Nandini Player", score: 650 },
-  ] : [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  // 1. HOST GAME PIN GENERATE KAREGA
-  useEffect(() => {
     if (!activeQuizId) {
       console.error("Quiz ID is missing");
       setLoading(false);
@@ -98,13 +79,10 @@ export default function HostLobby({ quizId }) {
 
     const createGame = async () => {
       try {
-        // Quiz Firebase se fetch karo
         const quizRef = doc(db, "quizzes", activeQuizId);
         const quizSnap = await getDoc(quizRef);
-
         const quizData = quizSnap.exists() ? quizSnap.data() : { questions: [] };
 
-        // 2. SAME PIN KO FIREBASE GAME ID BANAO
         const gameData = {
           gameId: generatedPin,
           pin: generatedPin,
@@ -114,15 +92,11 @@ export default function HostLobby({ quizId }) {
           questionStartedAt: null,
           answerRevealed: false,
           players: [],
-          questions: quizData.questions || []
+          questions: quizData.questions || [],
         };
 
-        await setDoc(
-          doc(db, "games", generatedPin),
-          gameData
-        );
+        await setDoc(doc(db, "games", generatedPin), gameData);
 
-        // 3. SAME PIN REDUX ME BHI SAVE KARO
         dispatch(
           setGame({
             gameId: generatedPin,
@@ -136,10 +110,8 @@ export default function HostLobby({ quizId }) {
         );
 
         setLoading(false);
-
-        console.log("Game created with PIN:", generatedPin);
       } catch (err) {
-        console.error("Error starting game session:", err);
+        console.error("Error creating game session:", err);
         setLoading(false);
       }
     };
@@ -147,7 +119,7 @@ export default function HostLobby({ quizId }) {
     createGame();
   }, [activeQuizId, dispatch]);
 
-  // 4. FIREBASE SE PLAYERS REAL-TIME LISTEN KARO
+  // 2. Real-time Firebase listener for joined players
   useEffect(() => {
     if (!pin) return;
 
@@ -156,10 +128,7 @@ export default function HostLobby({ quizId }) {
     const unsubscribe = onSnapshot(
       gameRef,
       (docSnap) => {
-        if (!docSnap.exists()) {
-          console.error("Game does not exist");
-          return;
-        }
+        if (!docSnap.exists()) return;
 
         const data = docSnap.data();
 
@@ -167,42 +136,72 @@ export default function HostLobby({ quizId }) {
           dispatch(setPlayers(data.players));
         }
 
-        // Game state update
-        dispatch(
-          setGame({
-            gameId: data.gameId,
-            pin: data.pin,
-            quizId: data.quizId,
-            status: data.status,
-            currentQuestionIndex:
-              data.currentQuestionIndex || 0,
-            questionStartedAt:
-              data.questionStartedAt || null,
-            answerRevealed:
-              data.answerRevealed || false,
-          })
-        );
+        if (data.status && data.status !== "waiting" && data.status === "playing") {
+          navigate("/host/live");
+        }
       },
       (error) => {
-        console.error("Error listening to game:", error);
+        console.error("Error listening to game lobby:", error);
       }
     );
 
     return () => unsubscribe();
-  }, [pin, dispatch]);
+  }, [pin, dispatch, navigate]);
 
-  // 5. HOST START GAME KAREGA
+  // Copy PIN to clipboard
+  const handleCopyPin = () => {
+    if (!pin) return;
+    navigator.clipboard.writeText(pin);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Add demo bot player for 1-click solo testing
+  const handleAddDemoBot = async () => {
+    if (!pin) return;
+    const botPool = [
+      "Alex Gamer 🎮",
+      "Quiz Whiz 🧠",
+      "Speedy Spark ⚡",
+      "Neon Star ⭐",
+      "Lucky Champion 👑",
+      "Byte Boss 💻",
+    ];
+    const botName = botPool[players.length % botPool.length];
+    const newBot = {
+      id: "bot_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      nickname: botName,
+      score: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      answered: false,
+      correct: null,
+    };
+
+    try {
+      await updateDoc(doc(db, "games", pin), {
+        players: arrayUnion(newBot),
+      });
+      dispatch(addPlayer(newBot));
+      playChime("join");
+    } catch (err) {
+      console.error("Error adding demo bot:", err);
+    }
+  };
+
+  // Host starts the live game
   const handleStartGame = async () => {
     if (!pin) return;
 
     if (players.length === 0) {
-      alert("Please wait for players to join.");
+      alert("Please wait for at least 1 player to join, or click 'Add Demo Bot' to test!");
       return;
     }
 
     try {
-      localStorage.setItem("hostPin", pin);
-      localStorage.setItem("gamePin", pin);
+      setStarting(true);
+      playChime("start");
+
       const gameRef = doc(db, "games", pin);
 
       await setDoc(
@@ -215,9 +214,7 @@ export default function HostLobby({ quizId }) {
           timerActive: true,
           answerRevealed: false,
         },
-        {
-          merge: true,
-        }
+        { merge: true }
       );
 
       dispatch(setGameStatus("playing"));
@@ -225,261 +222,138 @@ export default function HostLobby({ quizId }) {
     } catch (err) {
       console.error("Error starting game:", err);
       alert("Failed to start game.");
+      setStarting(false);
     }
   };
 
-  if (isFinished) {
-    const winner = displayPlayers[0];
-    return (
-      <div className="min-h-screen bg-linear-to-b from-indigo-900 via-purple-900 to-indigo-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* Confetti canvas */}
-        <ConfettiCanvas />
-
-        <div className="max-w-3xl w-full bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl rounded-3xl p-8 text-center relative z-10 animate-fade-in">
-          
-          <div className="flex justify-between items-center mb-6">
-            <button
-              onClick={() => {
-                setMockFinished(false);
-                if (game.status === "finished") {
-                  dispatch(setGameStatus("waiting"));
-                }
-              }}
-              className="text-gray-300 hover:text-white bg-white/15 px-4 py-2 rounded-xl transition font-semibold text-sm"
-            >
-              ⬅️ Back
-            </button>
-            <h2 className="text-2xl font-black bg-linear-to-r from-yellow-300 via-amber-200 to-yellow-400 bg-clip-text text-transparent drop-shadow-md">
-              🏆 FINAL PODIUM & RESULTS 🏆
-            </h2>
-            <button
-              onClick={playSoundOfJoy}
-              className="bg-yellow-500 hover:bg-yellow-600 text-indigo-950 px-4 py-2 rounded-xl font-bold text-sm shadow-md transition flex items-center gap-1"
-            >
-              🔊 Sound of Joy
-            </button>
-          </div>
-
-          {/* Winner Card (Special Treat) */}
-          {winner && (
-            <div className="bg-linear-to-r from-yellow-500 via-amber-400 to-yellow-600 p-1 rounded-3xl shadow-[0_0_30px_rgba(234,179,8,0.5)] mb-8 transform hover:scale-105 transition duration-300">
-              <div className="bg-indigo-950 rounded-[22px] p-6 text-center">
-                <span className="text-6xl block mb-2">👑</span>
-                <p className="text-yellow-400 font-extrabold uppercase tracking-widest text-xs mb-1">
-                  Ultimate Champion - 1st Place
-                </p>
-                <h3 className="text-4xl font-black text-white mb-2">{winner.nickname}</h3>
-                <p className="text-2xl font-black text-yellow-300">{winner.score || 0} Points</p>
-                
-                {/* Winner's Treat description */}
-                <div className="mt-4 bg-yellow-400/10 border border-yellow-400/20 rounded-xl p-3">
-                  <p className="text-sm text-yellow-200 font-medium">
-                    🎁 <span className="underline">Royal Winner Treat</span>: You get the legendary Gold Crown, unlimited bragging rights, and a digital box of royal chocolates! 👑🍫✨
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Leaderboard Position List */}
-          <div className="bg-black/25 rounded-2xl p-6 mb-8 max-h-300px overflow-y-auto border border-white/5">
-            <h4 className="text-lg font-bold text-gray-300 mb-4 text-left border-b border-white/10 pb-2">
-              Leaderboard Rankings & Rewards
-            </h4>
-            <div className="space-y-3">
-              {displayPlayers.map((player, idx) => {
-                let badge = `${idx + 1}th`;
-                let badgeStyle = "bg-white/10 text-white";
-                let treat = "Chocolate Coin 🪙";
-                
-                if (idx === 0) {
-                  badge = "🥇 1st";
-                  badgeStyle = "bg-yellow-500 text-indigo-950 font-bold";
-                  treat = "Royal Gold Crown & Box of Chocolates 👑🍫";
-                } else if (idx === 1) {
-                  badge = "🥈 2nd";
-                  badgeStyle = "bg-slate-300 text-slate-900 font-bold";
-                  treat = "Silver Medal & Pack of Gummy Bears 🥈🍬";
-                } else if (idx === 2) {
-                  badge = "🥉 3rd";
-                  badgeStyle = "bg-amber-600 text-white font-bold";
-                  treat = "Bronze Medal & Sweet Lollipop 🥉🍭";
-                } else {
-                  treat = "Good Game Badge & Chocolate Coin 🪙🍫";
-                }
-
-                return (
-                  <div key={idx} className="flex flex-col md:flex-row md:items-center justify-between p-3 bg-white/5 hover:bg-white/10 rounded-xl transition border border-white/5 gap-2 text-left">
-                    <div className="flex items-center gap-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-black ${badgeStyle}`}>
-                        {badge}
-                      </span>
-                      <span className="font-extrabold text-white text-lg">{player.nickname}</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between md:justify-end gap-4">
-                      <span className="font-black text-indigo-300">{player.score || 0} pts</span>
-                      <span className="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-lg">
-                        🎁 {treat}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => {
-                setMockFinished(false);
-                dispatch(resetGame());
-                navigate("/host/create");
-              }}
-              className="bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition duration-200 text-md"
-            >
-              Host Another Quiz 🚀
-            </button>
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-      <div className="max-w-2xl w-full bg-white shadow-xl rounded-2xl p-8 text-center">
+    <div className="min-h-screen bg-linear-to-br from-indigo-950 via-purple-900 to-slate-950 px-4 py-8 sm:px-6 lg:px-8 flex flex-col justify-center items-center select-none">
+      <div className="mx-auto max-w-2xl w-full">
 
-        <h2 className="text-3xl font-bold mb-2 text-indigo-600">
-          Game Lobby 🎮
-        </h2>
+        {/* Top Header Card */}
+        <div className="mb-6 text-center">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-200 backdrop-blur-md">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            Lobby Open &bull; Waiting for Players
+          </div>
 
-        <p className="text-gray-600 mb-6">
-          Ask players to enter this Game PIN:
-        </p>
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white">
+            Quiz Battle Lobby 🎮
+          </h1>
 
-        {/* GAME PIN */}
-        <div className="bg-indigo-50 border-2 border-dashed border-indigo-400 p-6 rounded-xl inline-block mb-8">
-          <p className="text-sm text-gray-500 mb-2">
-            GAME PIN
+          <p className="mt-2 text-sm text-slate-300">
+            Share the Game PIN below with your players so they can join the battle!
           </p>
-
-          <span className="text-5xl font-extrabold tracking-widest text-indigo-800">
-            {loading ? "Loading..." : pin}
-          </span>
         </div>
 
-        {/* PLAYERS */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold mb-4">
-            Joined Players ({players.length})
-          </h3>
+        {/* Main Lobby Card */}
+        <div className="rounded-3xl border border-white/10 bg-white/10 p-6 sm:p-8 shadow-2xl backdrop-blur-xl text-center">
 
-          {players.length === 0 ? (
-            <p className="text-gray-500 italic">
-              Waiting for players to join...
+          {/* Game PIN Display */}
+          <div className="mb-8">
+            <p className="text-xs font-bold uppercase tracking-widest text-indigo-300 mb-2">
+              GAME PIN
             </p>
-          ) : (
-            <div className="flex flex-wrap gap-3 justify-center">
-              {players.map((player, index) => (
-                <span
-                  key={player.id || index}
-                  className="bg-indigo-100 text-indigo-800 px-5 py-2 rounded-full font-medium shadow-sm"
-                >
-                  {player.nickname}
-                </span>
-              ))}
+
+            <div className="inline-flex flex-col sm:flex-row items-center gap-3 bg-slate-950/60 border-2 border-indigo-500/40 rounded-2xl p-4 sm:px-8 shadow-inner">
+              <span className="text-5xl sm:text-6xl font-black tracking-widest text-white drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]">
+                {loading ? "••••••" : pin}
+              </span>
+
+              <button
+                onClick={handleCopyPin}
+                disabled={loading || !pin}
+                className="mt-2 sm:mt-0 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white px-4 py-2 text-xs font-bold transition shadow-md cursor-pointer flex items-center gap-1.5"
+                title="Copy PIN to clipboard"
+              >
+                {copied ? "✅ Copied!" : "📋 Copy PIN"}
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* START GAME */}
-        <div className="flex flex-col gap-3 items-center justify-center">
-          <button
-            onClick={handleStartGame}
-            disabled={loading || players.length === 0}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold px-8 py-3 rounded-lg shadow-lg text-lg w-full max-w-xs"
-          >
-            {players.length === 0
-              ? "Waiting for Players..."
-              : "Start Game 🚀"}
-          </button>
+            <p className="mt-2 text-xs text-slate-400">
+              Players visit <strong>/player/join</strong> (or click Join Quiz) and enter this PIN.
+            </p>
+          </div>
 
-          <button
-            onClick={() => setMockFinished(true)}
-            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 font-bold px-6 py-2 rounded-lg text-sm shadow-sm transition"
-          >
-            🧪 Preview Final Podium & Treats
-          </button>
+          {/* Joined Players Section */}
+          <div className="mb-8 border-t border-white/10 pt-6">
+            <div className="flex items-center justify-between mb-4 px-2">
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>👥 Joined Players</span>
+                <span className="rounded-full bg-indigo-500/20 border border-indigo-400/30 px-2.5 py-0.5 text-xs font-black text-indigo-300">
+                  {players.length}
+                </span>
+              </h3>
+
+              <button
+                onClick={handleAddDemoBot}
+                disabled={loading}
+                className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5"
+                title="Add a simulated player to test the game"
+              >
+                🤖 Add Demo Bot
+              </button>
+            </div>
+
+            {players.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-8 text-center">
+                <div className="text-4xl mb-2 animate-bounce">⏳</div>
+                <p className="text-sm font-semibold text-slate-300">
+                  Waiting for players to enter PIN...
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Testing solo? Click <span className="font-bold text-indigo-300">&apos;Add Demo Bot&apos;</span> above!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
+                {players.map((player, index) => (
+                  <div
+                    key={player.id || index}
+                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2.5 text-left transition hover:border-indigo-400/40 hover:bg-white/10"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/30 text-xs font-black text-indigo-300">
+                      {index + 1}
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-white truncate">
+                      {player.nickname}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center border-t border-white/10 pt-6">
+            <button
+              onClick={() => navigate("/host/create")}
+              className="w-full sm:w-auto rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-5 py-3 text-sm font-bold text-slate-300 transition cursor-pointer"
+            >
+              ⬅️ Edit Questions
+            </button>
+
+            <button
+              onClick={handleStartGame}
+              disabled={loading || players.length === 0 || starting}
+              className="w-full sm:w-auto flex-1 rounded-xl bg-linear-to-r from-emerald-500 via-green-500 to-emerald-600 px-8 py-3.5 text-base font-black text-white shadow-xl shadow-green-900/40 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              {starting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Starting Battle...
+                </span>
+              ) : players.length === 0 ? (
+                "Waiting for Players to Join..."
+              ) : (
+                `Start Game with ${players.length} Player${players.length > 1 ? "s" : ""} 🚀`
+              )}
+            </button>
+          </div>
+
         </div>
 
       </div>
     </div>
   );
 }
-
-const ConfettiCanvas = () => {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let animationFrameId;
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const colors = ["#FFD700", "#FFC0CB", "#00FFFF", "#FF4500", "#32CD32", "#FF00FF"];
-    const particles = Array.from({ length: 150 }).map(() => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height - canvas.height,
-      r: Math.random() * 6 + 4,
-      d: Math.random() * canvas.height,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      tilt: Math.random() * 10 - 5,
-      tiltAngleIncremental: Math.random() * 0.07 + 0.02,
-      tiltAngle: 0
-    }));
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach((p, idx) => {
-        p.tiltAngle += p.tiltAngleIncremental;
-        p.y += (Math.cos(p.d) + 3 + p.r / 2) / 2;
-        p.tilt = Math.sin(p.tiltAngle - idx / 3) * 15;
-
-        if (p.y > canvas.height) {
-          p.x = Math.random() * canvas.width;
-          p.y = -20;
-          p.tilt = Math.random() * 10 - 5;
-        }
-
-        ctx.beginPath();
-        ctx.lineWidth = p.r;
-        ctx.strokeStyle = p.color;
-        ctx.moveTo(p.x + p.tilt + p.r / 2, p.y);
-        ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 2);
-        ctx.stroke();
-      });
-
-      animationFrameId = requestAnimationFrame(draw);
-    };
-
-    draw();
-
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-50" />;
-};
