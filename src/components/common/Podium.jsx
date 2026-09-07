@@ -185,7 +185,7 @@ function Podium({ winners = [] }) {
                     <span className="text-2xl">🏆</span>
                     <div>
                         <span className="text-[11px] font-black uppercase tracking-widest text-amber-400">
-                            Kahoot Quiz Battle
+                            KWIZZ Quiz Battle
                         </span>
                         <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide">
                             Final Podium & Results
