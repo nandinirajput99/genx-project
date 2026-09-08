@@ -857,9 +857,6 @@ function GameScreen() {
             }
         };
 
-    // =========================================================
-    // STATS
-    // =========================================================
 
     const correctAnswersCount =
         gameData?.players?.filter(
