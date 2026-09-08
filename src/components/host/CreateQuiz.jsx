@@ -269,13 +269,41 @@ function CreateQuiz() {
             </div>
 
             {questions.map((question, index) => {
+                const handleHostQuiz = async () => {
+                    if (questions.length === 0) return;
+                    const formattedQuestions = questions.map((q) => {
+                        const options = [
+                            ...q.incorrectAnswers,
+                            q.correctAnswer,
+                        ];
+                        
+                        options.sort(() => Math.random() - 0.5);
+                        return {
+                            id: q.id,
+                            question: q.question.text,
+                            questionText: q.question.text,
+                            options: options,
+                            correctAnswer: q.correctAnswer,
+                        };
+                    });
+                    
+                    formattedQuestions.sort(() => Math.random() - 0.5);
+                    
+                    try {
+                        await setDoc(doc(db, "quizzes", "default_quiz"), {
+                            questions: formattedQuestions,
+                        });
 
-              const options = [
-                ...question.incorrectAnswers,
-                question.correctAnswer,
-              ];
+                        playSoundOfJoy();
 
-              return (
+                        navigate("/host/lobby");
+                        
+                    } catch (err) {
+                        console.error("Error hosting quiz:", err);
+                    }
+                };
+
+                return (
                 <div
                   key={question.id}
                   className="group overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-xl backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-color-white/[0.13]">
