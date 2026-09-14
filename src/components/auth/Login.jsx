@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
@@ -36,7 +36,17 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+<<<<<<< HEAD
   const handleLogin = async (e) => {
+=======
+  useEffect(() => {
+    if (localStorage.getItem("userLoggedIn") === "true") {
+      navigate("/game-options");
+    }
+  }, [navigate]);
+
+  const handleLogin = (e) => {
+>>>>>>> ad55f99b68cba57c7bf486be9de1c3ec6f4336d3
     e.preventDefault();
     setError("");
 
@@ -45,6 +55,7 @@ function Login() {
       return;
     }
 
+<<<<<<< HEAD
     try {
       setLoading(true);
       let emailToUse = emailOrUsername.trim();
@@ -93,13 +104,22 @@ function Login() {
     } finally {
       setLoading(false);
     }
+=======
+    localStorage.setItem("userLoggedIn", "true");
+    localStorage.setItem("userEmail", email);
+    const derivedNick = email.includes("@") ? email.split("@")[0] : email;
+    if (!localStorage.getItem("userNickname")) {
+      localStorage.setItem("userNickname", derivedNick);
+    }
+    navigate("/game-options");
+>>>>>>> ad55f99b68cba57c7bf486be9de1c3ec6f4336d3
   };
 
   return (
     <div className="min-h-screen bg-[#0b071e] text-white flex flex-col items-center justify-center p-4 sm:p-6 overflow-x-hidden relative font-sans select-none">
       {/* Background ambient lighting glows */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-380px bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-280px bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-95 bg-purple-600/20 blur-[130px] rounded-full pointer-events-none"></div>
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-70 bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none"></div>
 
       {/* Floating 3D Question mark decorative tiles (Desktop) */}
       <div className="hidden lg:flex absolute left-12 top-1/4 w-14 h-14 bg-purple-900/40 border border-purple-500/40 rounded-2xl items-center justify-center text-purple-300 text-2xl font-black shadow-[0_0_20px_rgba(168,85,247,0.3)] -rotate-12 animate-pulse">
