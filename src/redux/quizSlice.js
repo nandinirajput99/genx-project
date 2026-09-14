@@ -40,7 +40,6 @@ const initialState = {
   source: null, // "api" | "bank"
 };
 
-<<<<<<< HEAD
 // API se questions fetch with automatic fallback to rich question bank
 export const fetchQuestions = createAsyncThunk(
   "quiz/fetchQuestions",
@@ -79,33 +78,6 @@ export const fetchQuestions = createAsyncThunk(
       questions: fallbackQuestions,
       source: "bank",
     };
-=======
-// ======================================================
-// FETCH QUESTIONS FROM TRIVIA API
-// ======================================================
-
-export const fetchQuestions = createAsyncThunk(
-  "quiz/fetchQuestions",
-
-  async (_, thunkAPI) => {
-    try {
-      const response = await fetch(
-        "https://the-trivia-api.com/v2/questions?limit=10"
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch questions");
-      }
-
-      const data = await response.json();
-
-      return data;
-    } catch (error) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to fetch questions"
-      );
-    }
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
   }
 );
 
@@ -305,17 +277,11 @@ const quizSlice = createSlice({
       state.quizId = "";
       state.title = "";
       state.questions = [];
-<<<<<<< HEAD
-      state.source = null;
-      state.error = null;
-=======
-
       state.visibility = "public";
       state.pin = "";
-
       state.currentQuiz = null;
       state.createdQuiz = null;
-
+      state.source = null;
       state.error = null;
     },
 
@@ -344,7 +310,6 @@ const quizSlice = createSlice({
         quiz.visibility || "public";
 
       state.pin = quiz.pin || "";
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
     },
   },
 
@@ -370,19 +335,12 @@ const quizSlice = createSlice({
         state.source = action.payload.source || "bank";
       })
 
-      .addCase(fetchQuestions.rejected, (state) => {
+      .addCase(fetchQuestions.rejected, (state, action) => {
         // Even in unexpected edge cases, fall back to question bank
         state.loading = false;
-<<<<<<< HEAD
-        state.error = null;
+        state.error = action.payload || action.error?.message || null;
         state.questions = getRandomQuestions("all", 10);
         state.source = "bank";
-=======
-
-        state.error =
-          action.payload ||
-          action.error.message ||
-          "Failed to fetch questions";
       });
 
     // ==================================================
@@ -481,7 +439,6 @@ const quizSlice = createSlice({
           action.payload ||
           action.error.message ||
           "Failed to find private quiz";
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
       });
   },
 });
