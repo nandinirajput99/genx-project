@@ -1,9 +1,12 @@
 import { createSlice } from "@reduxjs/toolkit";
+<<<<<<< HEAD
+=======
 
 // ======================================================
 // INITIAL STATE
 // ======================================================
 
+>>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
 const initialState = {
   // Live game information
   gameId: "",
@@ -176,10 +179,13 @@ const gameSlice = createSlice({
   },
 });
 
+<<<<<<< HEAD
+=======
 // ======================================================
 // EXPORT ACTIONS
 // ======================================================
 
+>>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
 export const {
   setGame,
   setGameStatus,

@@ -1,476 +1,1089 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { db } from "../../firebase/firebase";
+import React, { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useNavigate, useParams } from "react-router-dom";
+
 import {
+  collection,
   doc,
   getDoc,
-  setDoc,
   onSnapshot,
+  setDoc,
 } from "firebase/firestore";
 
-import { setPlayers } from "../../redux/playersSlice";
-import { setGame, setGameStatus, resetGame } from "../../redux/gameSlice";
+import { db } from "../../firebase/firebase";
 
-export default function HostLobby({ quizId }) {
+import {
+  setGame,
+  setGameStatus,
+  resetGame,
+} from "../../redux/gameSlice";
+
+import {
+  setPlayers,
+  clearPlayers,
+} from "../../redux/playersSlice";
+
+import {
+  setQuiz,
+} from "../../redux/quizSlice";
+
+
+// --------------------------------------------------
+// Generate 6 Digit Game PIN
+// --------------------------------------------------
+
+const generateGamePin = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+
+// --------------------------------------------------
+// HostLobby Component
+// --------------------------------------------------
+
+const HostLobby = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const { quizId: routeQuizId } = useParams();
+
+  const reduxQuizId = useSelector((state) => state.quiz.quizId);
+  const reduxQuizTitle = useSelector((state) => state.quiz.title);
+  const reduxQuestions = useSelector((state) => state.quiz.questions);
+
   const game = useSelector((state) => state.game);
   const players = useSelector((state) => state.players.players);
-  const reduxQuizId = useSelector((state) => state.quiz.quizId);
-  const [pin, setPin] = useState("");
+
+  const [quizData, setQuizData] = useState(null);
+
   const [loading, setLoading] = useState(true);
-  const [mockFinished, setMockFinished] = useState(false);
+  const [creatingGame, setCreatingGame] = useState(false);
 
-  const activeQuizId = quizId || reduxQuizId || "default_quiz";
-  const isFinished = game.status === "finished" || mockFinished;
+  const [error, setError] = useState("");
 
-  const playSoundOfJoy = () => {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      
-      const playNote = (freq, startTime, duration, type = "triangle") => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, startTime);
-        
-        gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.2, startTime + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-      };
+  const [gameCreated, setGameCreated] = useState(false);
 
-      const now = ctx.currentTime;
-      
-      // Joyous arpeggio (C Major)
-      playNote(261.63, now, 0.3, "triangle");       // C4
-      playNote(329.63, now + 0.1, 0.3, "triangle"); // E4
-      playNote(392.00, now + 0.2, 0.3, "triangle"); // G4
-      playNote(523.25, now + 0.3, 0.5, "sine");     // C5
-      
-      // Cheerful fanfare notes
-      playNote(392.00, now + 0.5, 0.2, "sawtooth"); // G4
-      playNote(523.25, now + 0.7, 0.6, "sine");     // C5
-      
-      // Warm chord
-      playNote(329.63, now + 0.7, 0.6, "sine");     // E4
-      playNote(659.25, now + 0.7, 0.6, "sine");     // E5
-    } catch (err) {
-      console.error("Audio error:", err);
-    }
-  };
+  const [copied, setCopied] = useState(false);
+
+
+  // --------------------------------------------------
+  // Decide Quiz ID
+  // --------------------------------------------------
+
+  const activeQuizId =
+    routeQuizId ||
+    reduxQuizId ||
+    localStorage.getItem("selectedQuizId");
+
+
+  // --------------------------------------------------
+  // Fetch Quiz
+  // --------------------------------------------------
 
   useEffect(() => {
-    if (isFinished) {
-      playSoundOfJoy();
-    }
-  }, [isFinished]);
-
-  const displayPlayers = isFinished && players.length === 0 ? [
-    { nickname: "Champion Shreya 👑", score: 1500 },
-    { nickname: "Smart Anshika", score: 1200 },
-    { nickname: "Awesome Anchal", score: 900 },
-    { nickname: "Nandini Player", score: 650 },
-  ] : [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  // 1. HOST GAME PIN GENERATE KAREGA
-  useEffect(() => {
-    if (!activeQuizId) {
-      console.error("Quiz ID is missing");
-      setLoading(false);
-      return;
-    }
-
-    const generatedPin = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
-
-    setPin(generatedPin);
-
-    const createGame = async () => {
+    const loadQuiz = async () => {
       try {
-        // Quiz Firebase se fetch karo
+        setLoading(true);
+        setError("");
+
+        if (!activeQuizId) {
+          throw new Error("Quiz ID not found.");
+        }
+
+        // First try Redux data
+        if (
+          reduxQuestions &&
+          reduxQuestions.length > 0 &&
+          reduxQuizId === activeQuizId
+        ) {
+          const localQuiz = {
+            id: activeQuizId,
+            title: reduxQuizTitle || "Untitled Quiz",
+            questions: reduxQuestions,
+          };
+
+          setQuizData(localQuiz);
+
+          setLoading(false);
+          return;
+        }
+
+        // Otherwise fetch from Firestore
         const quizRef = doc(db, "quizzes", activeQuizId);
+
         const quizSnap = await getDoc(quizRef);
 
-        const quizData = quizSnap.exists() ? quizSnap.data() : { questions: [] };
+        if (!quizSnap.exists()) {
+          throw new Error("Quiz not found in Firestore.");
+        }
 
-        // 2. SAME PIN KO FIREBASE GAME ID BANAO
-        const gameData = {
-          gameId: generatedPin,
-          pin: generatedPin,
-          quizId: activeQuizId,
-          status: "waiting",
-          currentQuestionIndex: 0,
-          questionStartedAt: null,
-          answerRevealed: false,
-          players: [],
-          questions: quizData.questions || []
+        const data = quizSnap.data();
+
+        const loadedQuiz = {
+          id: quizSnap.id,
+          ...data,
+          questions: Array.isArray(data.questions)
+            ? data.questions
+            : [],
         };
 
-        await setDoc(
-          doc(db, "games", generatedPin),
-          gameData
-        );
+        setQuizData(loadedQuiz);
 
-        // 3. SAME PIN REDUX ME BHI SAVE KARO
+        // Also store quiz in Redux
         dispatch(
-          setGame({
-            gameId: generatedPin,
-            pin: generatedPin,
-            quizId: activeQuizId,
-            status: "waiting",
-            currentQuestionIndex: 0,
-            questionStartedAt: null,
-            answerRevealed: false,
+          setQuiz({
+            quizId: quizSnap.id,
+            title: loadedQuiz.title || "Untitled Quiz",
+            questions: loadedQuiz.questions,
           })
         );
 
-        setLoading(false);
-
-        console.log("Game created with PIN:", generatedPin);
       } catch (err) {
-        console.error("Error starting game session:", err);
+        console.error("Quiz loading error:", err);
+
+        setError(
+          err.message || "Unable to load quiz."
+        );
+      } finally {
         setLoading(false);
       }
     };
 
-    createGame();
-  }, [activeQuizId, dispatch]);
+    loadQuiz();
+  }, [
+    activeQuizId,
+    reduxQuizId,
+    reduxQuizTitle,
+    reduxQuestions,
+    dispatch,
+  ]);
 
-  // 4. FIREBASE SE PLAYERS REAL-TIME LISTEN KARO
-  useEffect(() => {
-    if (!pin) return;
 
-    const gameRef = doc(db, "games", pin);
+  // --------------------------------------------------
+  // Create Live Game
+  // --------------------------------------------------
 
-    const unsubscribe = onSnapshot(
-      gameRef,
-      (docSnap) => {
-        if (!docSnap.exists()) {
-          console.error("Game does not exist");
-          return;
-        }
+  const createLiveGame = async () => {
+    try {
+      setCreatingGame(true);
+      setError("");
 
-        const data = docSnap.data();
-
-        if (data.players) {
-          dispatch(setPlayers(data.players));
-        }
-
-        // Game state update
-        dispatch(
-          setGame({
-            gameId: data.gameId,
-            pin: data.pin,
-            quizId: data.quizId,
-            status: data.status,
-            currentQuestionIndex:
-              data.currentQuestionIndex || 0,
-            questionStartedAt:
-              data.questionStartedAt || null,
-            answerRevealed:
-              data.answerRevealed || false,
-          })
-        );
-      },
-      (error) => {
-        console.error("Error listening to game:", error);
+      if (!quizData) {
+        throw new Error("Quiz data is not available.");
       }
-    );
 
-    return () => unsubscribe();
-  }, [pin, dispatch]);
+      if (
+        !quizData.questions ||
+        quizData.questions.length === 0
+      ) {
+        throw new Error(
+          "This quiz does not contain any questions."
+        );
+      }
 
-  // 5. HOST START GAME KAREGA
-  const handleStartGame = async () => {
-    if (!pin) return;
+      // Generate unique live game PIN
+      let generatedPin = "";
 
-    if (players.length === 0) {
-      alert("Please wait for players to join.");
+      let existingGame = true;
+
+      // Try until unused PIN is found
+      while (existingGame) {
+        generatedPin = generateGamePin();
+
+        const gameRef = doc(
+          db,
+          "games",
+          generatedPin
+        );
+
+        const gameSnap = await getDoc(gameRef);
+
+        existingGame = gameSnap.exists();
+      }
+
+      const gameRef = doc(
+        db,
+        "games",
+        generatedPin
+      );
+
+      // Initial live game object
+      const newGame = {
+        gameId: generatedPin,
+
+        pin: generatedPin,
+
+        quizId: quizData.id,
+
+        title: quizData.title || "Quiz",
+
+        status: "waiting",
+
+        currentQuestionIndex: 0,
+
+        questionStartedAt: null,
+
+        questionDuration: 30,
+
+        answerRevealed: false,
+
+        questions: quizData.questions,
+
+        players: [],
+
+        createdAt: Date.now(),
+
+        hostConnected: true,
+      };
+
+      await setDoc(gameRef, newGame);
+
+      // Save game in Redux
+      dispatch(
+        setGame({
+          gameId: generatedPin,
+          pin: generatedPin,
+          quizId: quizData.id,
+          title: quizData.title || "Quiz",
+          status: "waiting",
+          currentQuestionIndex: 0,
+          questionStartedAt: null,
+          questionDuration: 30,
+          answerRevealed: false,
+          players: [],
+          questions: quizData.questions,
+        })
+      );
+
+      // Save selected game information locally
+      localStorage.setItem(
+        "hostGamePin",
+        generatedPin
+      );
+
+      localStorage.setItem(
+        "hostQuizId",
+        quizData.id
+      );
+
+      setGameCreated(true);
+
+    } catch (err) {
+      console.error("Game creation error:", err);
+
+      setError(
+        err.message ||
+        "Failed to create live game."
+      );
+    } finally {
+      setCreatingGame(false);
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Listen for Real-Time Game Updates
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!gameCreated || !game.pin) {
       return;
     }
 
+    const gameRef = doc(
+      db,
+      "games",
+      game.pin
+    );
+
+    const unsubscribe = onSnapshot(
+      gameRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setError("Live game no longer exists.");
+          return;
+        }
+
+        const data = snapshot.data();
+
+        // ------------------------------------------
+        // Update Redux Game
+        // ------------------------------------------
+
+        dispatch(
+          setGame({
+            ...data,
+            gameId: snapshot.id,
+            pin: data.pin || snapshot.id,
+          })
+        );
+
+
+        // ------------------------------------------
+        // Update Redux Players
+        // ------------------------------------------
+
+        const updatedPlayers =
+          Array.isArray(data.players)
+            ? data.players
+            : [];
+
+        dispatch(
+          setPlayers(updatedPlayers)
+        );
+
+
+        // ------------------------------------------
+        // If game started
+        // ------------------------------------------
+
+        if (data.status === "playing") {
+          dispatch(
+            setGameStatus("playing")
+          );
+
+          navigate("/host/live");
+        }
+
+
+        // ------------------------------------------
+        // If game finished
+        // ------------------------------------------
+
+        if (data.status === "finished") {
+          dispatch(
+            setGameStatus("finished")
+          );
+        }
+      },
+      (err) => {
+        console.error(
+          "Game listener error:",
+          err
+        );
+
+        setError(
+          "Unable to sync live game."
+        );
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+
+  }, [
+    gameCreated,
+    game.pin,
+    dispatch,
+    navigate,
+  ]);
+
+
+  // --------------------------------------------------
+  // Start Game
+  // --------------------------------------------------
+
+  const handleStartGame = async () => {
     try {
-      const gameRef = doc(db, "games", pin);
+      setError("");
+
+      if (!game.pin) {
+        setError(
+          "Game PIN is not available."
+        );
+        return;
+      }
+
+      if (players.length === 0) {
+        setError(
+          "At least one player is required to start the game."
+        );
+        return;
+      }
+
+      const gameRef = doc(
+        db,
+        "games",
+        game.pin
+      );
 
       await setDoc(
         gameRef,
         {
           status: "playing",
+
+          currentQuestionIndex: 0,
+
+          questionStartedAt: null,
+
+          answerRevealed: false,
+
+          hostConnected: true,
         },
         {
           merge: true,
         }
       );
 
-      dispatch(setGameStatus("playing"));
+      dispatch(
+        setGameStatus("playing")
+      );
+
       navigate("/host/live");
+
     } catch (err) {
-      console.error("Error starting game:", err);
-      alert("Failed to start game.");
+      console.error(
+        "Start game error:",
+        err
+      );
+
+      setError(
+        err.message ||
+        "Unable to start game."
+      );
     }
   };
 
-  if (isFinished) {
-    const winner = displayPlayers[0];
+
+  // --------------------------------------------------
+  // Copy PIN
+  // --------------------------------------------------
+
+  const handleCopyPin = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        game.pin
+      );
+
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+
+    } catch (err) {
+      console.error(
+        "Copy error:",
+        err
+      );
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Copy Join URL
+  // --------------------------------------------------
+
+  const handleCopyJoinLink = async () => {
+    try {
+      const joinUrl =
+        `${window.location.origin}/player/join`;
+
+      await navigator.clipboard.writeText(
+        joinUrl
+      );
+
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+
+    } catch (err) {
+      console.error(
+        "Join link copy error:",
+        err
+      );
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Leave Lobby
+  // --------------------------------------------------
+
+  const handleLeaveLobby = async () => {
+    try {
+      if (game.pin) {
+        const gameRef = doc(
+          db,
+          "games",
+          game.pin
+        );
+
+        await setDoc(
+          gameRef,
+          {
+            status: "cancelled",
+            hostConnected: false,
+          },
+          {
+            merge: true,
+          }
+        );
+      }
+
+      dispatch(resetGame());
+      dispatch(clearPlayers());
+
+      localStorage.removeItem(
+        "hostGamePin"
+      );
+
+      localStorage.removeItem(
+        "hostQuizId"
+      );
+
+      navigate("/host");
+
+    } catch (err) {
+      console.error(
+        "Leave lobby error:",
+        err
+      );
+
+      navigate("/host");
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Loading Screen
+  // --------------------------------------------------
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-linear-to-b from-indigo-900 via-purple-900 to-indigo-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        {/* Confetti canvas */}
-        <ConfettiCanvas />
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
 
-        <div className="max-w-3xl w-full bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl rounded-3xl p-8 text-center relative z-10 animate-fade-in">
-          
-          <div className="flex justify-between items-center mb-6">
-            <button
-              onClick={() => {
-                setMockFinished(false);
-                if (game.status === "finished") {
-                  dispatch(setGameStatus("waiting"));
-                }
-              }}
-              className="text-gray-300 hover:text-white bg-white/15 px-4 py-2 rounded-xl transition font-semibold text-sm"
-            >
-              ⬅️ Back
-            </button>
-            <h2 className="text-2xl font-black bg-linear-to-r from-yellow-300 via-amber-200 to-yellow-400 bg-clip-text text-transparent drop-shadow-md">
-              🏆 FINAL PODIUM & RESULTS 🏆
-            </h2>
-            <button
-              onClick={playSoundOfJoy}
-              className="bg-yellow-500 hover:bg-yellow-600 text-indigo-950 px-4 py-2 rounded-xl font-bold text-sm shadow-md transition flex items-center gap-1"
-            >
-              🔊 Sound of Joy
-            </button>
-          </div>
+        <div className="text-center">
 
-          {/* Winner Card (Special Treat) */}
-          {winner && (
-            <div className="bg-linear-to-r from-yellow-500 via-amber-400 to-yellow-600 p-1 rounded-3xl shadow-[0_0_30px_rgba(234,179,8,0.5)] mb-8 transform hover:scale-105 transition duration-300">
-              <div className="bg-indigo-950 rounded-[22px] p-6 text-center">
-                <span className="text-6xl block mb-2">👑</span>
-                <p className="text-yellow-400 font-extrabold uppercase tracking-widest text-xs mb-1">
-                  Ultimate Champion - 1st Place
-                </p>
-                <h3 className="text-4xl font-black text-white mb-2">{winner.nickname}</h3>
-                <p className="text-2xl font-black text-yellow-300">{winner.score || 0} Points</p>
-                
-                {/* Winner's Treat description */}
-                <div className="mt-4 bg-yellow-400/10 border border-yellow-400/20 rounded-xl p-3">
-                  <p className="text-sm text-yellow-200 font-medium">
-                    🎁 <span className="underline">Royal Winner Treat</span>: You get the legendary Gold Crown, unlimited bragging rights, and a digital box of royal chocolates! 👑🍫✨
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-5" />
 
-          {/* Leaderboard Position List */}
-          <div className="bg-black/25 rounded-2xl p-6 mb-8 max-h-300px overflow-y-auto border border-white/5">
-            <h4 className="text-lg font-bold text-gray-300 mb-4 text-left border-b border-white/10 pb-2">
-              Leaderboard Rankings & Rewards
-            </h4>
-            <div className="space-y-3">
-              {displayPlayers.map((player, idx) => {
-                let badge = `${idx + 1}th`;
-                let badgeStyle = "bg-white/10 text-white";
-                let treat = "Chocolate Coin 🪙";
-                
-                if (idx === 0) {
-                  badge = "🥇 1st";
-                  badgeStyle = "bg-yellow-500 text-indigo-950 font-bold";
-                  treat = "Royal Gold Crown & Box of Chocolates 👑🍫";
-                } else if (idx === 1) {
-                  badge = "🥈 2nd";
-                  badgeStyle = "bg-slate-300 text-slate-900 font-bold";
-                  treat = "Silver Medal & Pack of Gummy Bears 🥈🍬";
-                } else if (idx === 2) {
-                  badge = "🥉 3rd";
-                  badgeStyle = "bg-amber-600 text-white font-bold";
-                  treat = "Bronze Medal & Sweet Lollipop 🥉🍭";
-                } else {
-                  treat = "Good Game Badge & Chocolate Coin 🪙🍫";
-                }
+          <h2 className="text-xl font-bold">
+            Loading Quiz...
+          </h2>
 
-                return (
-                  <div key={idx} className="flex flex-col md:flex-row md:items-center justify-between p-3 bg-white/5 hover:bg-white/10 rounded-xl transition border border-white/5 gap-2 text-left">
-                    <div className="flex items-center gap-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-black ${badgeStyle}`}>
-                        {badge}
-                      </span>
-                      <span className="font-extrabold text-white text-lg">{player.nickname}</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between md:justify-end gap-4">
-                      <span className="font-black text-indigo-300">{player.score || 0} pts</span>
-                      <span className="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-lg">
-                        🎁 {treat}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => {
-                setMockFinished(false);
-                dispatch(resetGame());
-                navigate("/host/create");
-              }}
-              className="bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition duration-200 text-md"
-            >
-              Host Another Quiz 🚀
-            </button>
-          </div>
+          <p className="text-slate-400 mt-2">
+            Preparing your host lobby
+          </p>
 
         </div>
+
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-      <div className="max-w-2xl w-full bg-white shadow-xl rounded-2xl p-8 text-center">
 
-        <h2 className="text-3xl font-bold mb-2 text-indigo-600">
-          Game Lobby 🎮
-        </h2>
+  // --------------------------------------------------
+  // Error Screen
+  // --------------------------------------------------
 
-        <p className="text-gray-600 mb-6">
-          Ask players to enter this Game PIN:
-        </p>
+  if (error && !quizData && !gameCreated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
 
-        {/* GAME PIN */}
-        <div className="bg-indigo-50 border-2 border-dashed border-indigo-400 p-6 rounded-xl inline-block mb-8">
-          <p className="text-sm text-gray-500 mb-2">
-            GAME PIN
+        <div className="w-full max-w-md bg-white/10 border border-white/10 rounded-3xl p-8 text-center">
+
+          <div className="text-5xl mb-5">
+            ⚠️
+          </div>
+
+          <h2 className="text-2xl font-bold mb-3">
+            Something went wrong
+          </h2>
+
+          <p className="text-red-300 mb-6">
+            {error}
           </p>
 
-          <span className="text-5xl font-extrabold tracking-widest text-indigo-800">
-            {loading ? "Loading..." : pin}
-          </span>
-        </div>
-
-        {/* PLAYERS */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold mb-4">
-            Joined Players ({players.length})
-          </h3>
-
-          {players.length === 0 ? (
-            <p className="text-gray-500 italic">
-              Waiting for players to join...
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-3 justify-center">
-              {players.map((player, index) => (
-                <span
-                  key={player.id || index}
-                  className="bg-indigo-100 text-indigo-800 px-5 py-2 rounded-full font-medium shadow-sm"
-                >
-                  {player.nickname}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* START GAME */}
-        <div className="flex flex-col gap-3 items-center justify-center">
           <button
-            onClick={handleStartGame}
-            disabled={loading || players.length === 0}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold px-8 py-3 rounded-lg shadow-lg text-lg w-full max-w-xs"
+            onClick={() => navigate("/host")}
+            className="w-full py-3 rounded-xl bg-white text-slate-950 font-bold hover:bg-slate-200 transition"
           >
-            {players.length === 0
-              ? "Waiting for Players..."
-              : "Start Game 🚀"}
+            Back to Host
           </button>
 
-          <button
-            onClick={() => setMockFinished(true)}
-            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 font-bold px-6 py-2 rounded-lg text-sm shadow-sm transition"
-          >
-            🧪 Preview Final Podium & Treats
-          </button>
         </div>
 
       </div>
+    );
+  }
+
+
+  // --------------------------------------------------
+  // Quiz Loaded But Game Not Created
+  // --------------------------------------------------
+
+  if (!gameCreated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white px-4 py-10">
+
+        <div className="max-w-4xl mx-auto">
+
+          {/* Header */}
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
+
+            <div>
+              <p className="text-sm text-slate-400">
+                HOST LOBBY
+              </p>
+
+              <h1 className="text-3xl sm:text-4xl font-black mt-1">
+                Ready to Host?
+              </h1>
+            </div>
+
+            <button
+              onClick={() => navigate("/host")}
+              className="px-5 py-2.5 rounded-xl bg-white/10 border border-white/10 hover:bg-white/20 transition"
+            >
+              ← Back
+            </button>
+
+          </div>
+
+
+          {/* Quiz Card */}
+
+          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8">
+
+            <div className="flex flex-col sm:flex-row gap-5 sm:items-center">
+
+              <div className="w-16 h-16 rounded-2xl bg-white text-slate-950 flex items-center justify-center text-3xl font-black shrink-0">
+                ?
+              </div>
+
+              <div className="flex-1">
+
+                <p className="text-sm text-slate-400">
+                  QUIZ
+                </p>
+
+                <h2 className="text-2xl sm:text-3xl font-bold">
+                  {quizData?.title || "Untitled Quiz"}
+                </h2>
+
+                <p className="text-slate-400 mt-2">
+                  {quizData?.questions?.length || 0} questions
+                </p>
+
+              </div>
+
+            </div>
+
+
+            {/* Quiz Information */}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+
+              <div className="bg-black/20 rounded-2xl p-5">
+                <p className="text-slate-400 text-sm">
+                  Questions
+                </p>
+
+                <p className="text-2xl font-bold mt-1">
+                  {quizData?.questions?.length || 0}
+                </p>
+              </div>
+
+              <div className="bg-black/20 rounded-2xl p-5">
+                <p className="text-slate-400 text-sm">
+                  Mode
+                </p>
+
+                <p className="text-2xl font-bold mt-1">
+                  Live
+                </p>
+              </div>
+
+              <div className="bg-black/20 rounded-2xl p-5">
+                <p className="text-slate-400 text-sm">
+                  Timer
+                </p>
+
+                <p className="text-2xl font-bold mt-1">
+                  30 sec
+                </p>
+              </div>
+
+            </div>
+
+
+            {/* Error */}
+
+            {error && (
+              <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300">
+                {error}
+              </div>
+            )}
+
+
+            {/* Create Button */}
+
+            <button
+              onClick={createLiveGame}
+              disabled={creatingGame}
+              className="w-full mt-8 py-4 rounded-2xl bg-white text-slate-950 font-black text-lg hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creatingGame
+                ? "Creating Live Game..."
+                : "🚀 Create Live Game"}
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+    );
+  }
+
+
+  // --------------------------------------------------
+  // Main Lobby UI
+  // --------------------------------------------------
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white overflow-x-hidden">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+
+
+        {/* =========================================
+            HEADER
+        ========================================= */}
+
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5 mb-8">
+
+          <div>
+
+            <div className="flex items-center gap-2 mb-2">
+
+              <span className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
+
+              <span className="text-sm font-semibold text-green-300">
+                LIVE LOBBY
+              </span>
+
+            </div>
+
+            <h1 className="text-2xl sm:text-4xl font-black">
+              {quizData?.title || "Quiz Lobby"}
+            </h1>
+
+            <p className="text-slate-400 mt-2">
+              Waiting for players to join...
+            </p>
+
+          </div>
+
+
+          <button
+            onClick={handleLeaveLobby}
+            className="px-5 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20 transition"
+          >
+            Leave Lobby
+          </button>
+
+        </div>
+
+
+        {/* =========================================
+            GAME PIN
+        ========================================= */}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+
+          {/* PIN CARD */}
+
+          <div className="lg:col-span-2 bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-10 text-center">
+
+            <p className="text-sm sm:text-base font-semibold text-slate-400 uppercase tracking-widest">
+              Join Code
+            </p>
+
+            <div className="text-6xl sm:text-8xl font-black tracking-[0.15em] mt-4 mb-6">
+              {game.pin}
+            </div>
+
+            <p className="text-slate-400 mb-6">
+              Ask players to enter this code on the Join Game page.
+            </p>
+
+
+            <div className="flex flex-col sm:flex-row justify-center gap-3">
+
+              <button
+                onClick={handleCopyPin}
+                className="px-6 py-3 rounded-xl bg-white text-slate-950 font-bold hover:bg-slate-200 transition"
+              >
+                {copied
+                  ? "✓ Copied"
+                  : "Copy PIN"}
+              </button>
+
+              <button
+                onClick={handleCopyJoinLink}
+                className="px-6 py-3 rounded-xl bg-white/10 border border-white/10 font-bold hover:bg-white/20 transition"
+              >
+                Copy Join Link
+              </button>
+
+            </div>
+
+          </div>
+
+
+          {/* PLAYER COUNT */}
+
+          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
+
+            <div>
+
+              <p className="text-sm text-slate-400">
+                PLAYERS JOINED
+              </p>
+
+              <p className="text-6xl font-black mt-3">
+                {players.length}
+              </p>
+
+            </div>
+
+            <div className="mt-8">
+
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-400">
+                  Lobby status
+                </span>
+
+                <span className="text-green-300 font-semibold">
+                  Waiting
+                </span>
+              </div>
+
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+
+                <div
+                  className="h-full bg-green-400 transition-all duration-500"
+                  style={{
+                    width:
+                      players.length > 0
+                        ? "100%"
+                        : "5%",
+                  }}
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* =========================================
+            ERROR
+        ========================================= */}
+
+        {error && (
+          <div className="mt-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300">
+            {error}
+          </div>
+        )}
+
+
+        {/* =========================================
+            PLAYERS
+        ========================================= */}
+
+        <div className="mt-6 bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+
+            <div>
+
+              <h2 className="text-xl sm:text-2xl font-bold">
+                Players
+              </h2>
+
+              <p className="text-sm text-slate-400 mt-1">
+                Players will appear here automatically.
+              </p>
+
+            </div>
+
+            <div className="px-4 py-2 rounded-xl bg-white/10 text-sm font-semibold">
+              {players.length} joined
+            </div>
+
+          </div>
+
+
+          {players.length === 0 ? (
+
+            <div className="min-h-[220px] flex flex-col items-center justify-center text-center">
+
+              <div className="text-5xl mb-4">
+                👥
+              </div>
+
+              <h3 className="text-xl font-bold">
+                Waiting for players
+              </h3>
+
+              <p className="text-slate-400 mt-2 max-w-md">
+                Share the game PIN with your players.
+                They will appear here when they join.
+              </p>
+
+            </div>
+
+          ) : (
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[300px] overflow-y-auto pr-1">
+
+              {players.map((player, index) => (
+
+                <div
+                  key={player.id || `${player.name}-${index}`}
+                  className="bg-black/20 border border-white/10 rounded-2xl p-4 text-center hover:bg-white/10 transition"
+                >
+
+                  <div className="w-12 h-12 rounded-full bg-white text-slate-950 flex items-center justify-center mx-auto font-black text-lg">
+                    {(
+                      player.name ||
+                      player.nickname ||
+                      "P"
+                    )
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+
+                  <p className="font-semibold mt-3 truncate">
+                    {player.name ||
+                      player.nickname ||
+                      "Player"}
+                  </p>
+
+                  <p className="text-xs text-slate-500 mt-1">
+                    Player {index + 1}
+                  </p>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </div>
+
+
+        {/* =========================================
+            START GAME
+        ========================================= */}
+
+        <div className="mt-6 bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8">
+
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+            <div>
+
+              <h2 className="text-xl sm:text-2xl font-bold">
+                Ready to start?
+              </h2>
+
+              <p className="text-slate-400 mt-2">
+                {players.length === 0
+                  ? "Waiting for at least one player..."
+                  : `${players.length} player${players.length > 1 ? "s" : ""} ready to play.`}
+              </p>
+
+            </div>
+
+
+            <button
+              onClick={handleStartGame}
+              disabled={players.length === 0}
+              className="w-full lg:w-auto px-10 py-4 rounded-2xl bg-green-400 text-slate-950 font-black text-lg hover:bg-green-300 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              🚀 Start Game
+            </button>
+
+          </div>
+
+        </div>
+
+
+        {/* =========================================
+            HOW TO PLAY
+        ========================================= */}
+
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+
+            <div className="text-2xl mb-3">
+              1️⃣
+            </div>
+
+            <h3 className="font-bold">
+              Share the PIN
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              Give players the six-digit game PIN.
+            </p>
+
+          </div>
+
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+
+            <div className="text-2xl mb-3">
+              2️⃣
+            </div>
+
+            <h3 className="font-bold">
+              Players Join
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              Players enter their nickname and PIN.
+            </p>
+
+          </div>
+
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+
+            <div className="text-2xl mb-3">
+              3️⃣
+            </div>
+
+            <h3 className="font-bold">
+              Start Quiz
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              Start the game when everyone is ready.
+            </p>
+
+          </div>
+
+        </div>
+
+
+      </div>
+
     </div>
   );
-}
-
-const ConfettiCanvas = () => {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let animationFrameId;
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const colors = ["#FFD700", "#FFC0CB", "#00FFFF", "#FF4500", "#32CD32", "#FF00FF"];
-    const particles = Array.from({ length: 150 }).map(() => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height - canvas.height,
-      r: Math.random() * 6 + 4,
-      d: Math.random() * canvas.height,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      tilt: Math.random() * 10 - 5,
-      tiltAngleIncremental: Math.random() * 0.07 + 0.02,
-      tiltAngle: 0
-    }));
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach((p, idx) => {
-        p.tiltAngle += p.tiltAngleIncremental;
-        p.y += (Math.cos(p.d) + 3 + p.r / 2) / 2;
-        p.tilt = Math.sin(p.tiltAngle - idx / 3) * 15;
-
-        if (p.y > canvas.height) {
-          p.x = Math.random() * canvas.width;
-          p.y = -20;
-          p.tilt = Math.random() * 10 - 5;
-        }
-
-        ctx.beginPath();
-        ctx.lineWidth = p.r;
-        ctx.strokeStyle = p.color;
-        ctx.moveTo(p.x + p.tilt + p.r / 2, p.y);
-        ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 2);
-        ctx.stroke();
-      });
-
-      animationFrameId = requestAnimationFrame(draw);
-    };
-
-    draw();
-
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-50" />;
 };
+
+export default HostLobby;
