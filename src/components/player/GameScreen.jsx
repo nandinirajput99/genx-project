@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { db } from "../../firebase/firebase";
 import { doc, onSnapshot, runTransaction } from "firebase/firestore";
 import Podium from "../common/Podium";
+import bgMusic from "../../assets/audio/background-music.mp3";
 
 import {
     FaVolumeUp,
@@ -34,7 +35,7 @@ function GameScreen() {
     const [selectedAnswer, setSelectedAnswer] = useState("");
     const [submitted, setSubmitted] = useState(false);
     const [isCorrect, setIsCorrect] = useState(null);
-    const [timeLeft, setTimeLeft] = useState(20);
+    const [timeLeft, setTimeLeft] = useState(15);
     const [musicEnabled, setMusicEnabled] = useState(true);
 
     // Keeps option order stable for the whole question
@@ -43,7 +44,7 @@ function GameScreen() {
     // ---------- AUDIO REFS ----------
 
     const audioCtxRef = useRef(null);
-    const musicTimerRef = useRef(null);
+    const bgAudioRef = useRef(null);
     const timeUpPlayedRef = useRef(false);
 
     // ---------- STREAK REFS ----------
@@ -74,13 +75,13 @@ function GameScreen() {
 
     const currentPlayer =
         gameData?.players?.find(
-            (p) => p.id === localPlayerId
+            (p) => String(p.id) === String(localPlayerId)
         ) ||
         gameData?.players?.find(
-            (p) => p.nickname === localPlayerNickname
+            (p) => p.nickname && localPlayerNickname && p.nickname.toLowerCase() === localPlayerNickname.toLowerCase()
         ) ||
         players?.find(
-            (p) => p.id === localPlayerId
+            (p) => String(p.id) === String(localPlayerId)
         ) ||
         players?.[players.length - 1];
 
@@ -104,6 +105,7 @@ function GameScreen() {
             return audioCtxRef.current;
         } catch {
             return null;
+            
         }
     }, []);
 
@@ -181,122 +183,43 @@ function GameScreen() {
     // =========================================================
 
     useEffect(() => {
-        if (!musicEnabled) {
-            if (musicTimerRef.current) {
-                clearInterval(
-                    musicTimerRef.current
-                );
-
-                musicTimerRef.current = null;
-            }
-
-            return;
+        if (!bgAudioRef.current) {
+            const audio = new Audio(bgMusic);
+            audio.loop = true;
+            audio.volume = 0.15;
+            bgAudioRef.current = audio;
         }
 
-        const ctx = getAudioContext();
+        const audio = bgAudioRef.current;
 
-        if (!ctx) return;
-
-        const melody = [
-            261.63,
-            329.63,
-            392.0,
-            329.63,
-            293.66,
-            349.23,
-            440.0,
-            349.23,
-        ];
-
-        let noteIndex = 0;
-
-        const playSoftNote = () => {
-            if (ctx.state !== "running") return;
-
-            try {
-                const now = ctx.currentTime;
-
-                const osc =
-                    ctx.createOscillator();
-
-                const gain =
-                    ctx.createGain();
-
-                const filter =
-                    ctx.createBiquadFilter();
-
-                osc.type = "sine";
-
-                osc.frequency.setValueAtTime(
-                    melody[
-                        noteIndex %
-                            melody.length
-                    ],
-                    now
-                );
-
-                filter.type = "lowpass";
-
-                filter.frequency.setValueAtTime(
-                    700,
-                    now
-                );
-
-                gain.gain.setValueAtTime(
-                    0.0001,
-                    now
-                );
-
-                gain.gain.exponentialRampToValueAtTime(
-                    0.012,
-                    now + 0.05
-                );
-
-                gain.gain.exponentialRampToValueAtTime(
-                    0.0001,
-                    now + 0.38
-                );
-
-                osc.connect(filter);
-                filter.connect(gain);
-                gain.connect(ctx.destination);
-
-                osc.start(now);
-                osc.stop(now + 0.4);
-
-                noteIndex += 1;
-            } catch {
-                // Ignore browser audio errors
+        if (musicEnabled) {
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(() => {
+                    // Autoplay blocked by browser policy until user interaction
+                });
             }
-        };
-
-        musicTimerRef.current =
-            setInterval(
-                playSoftNote,
-                650
-            );
+        } else {
+            audio.pause();
+        }
 
         return () => {
-            if (musicTimerRef.current) {
-                clearInterval(
-                    musicTimerRef.current
-                );
-
-                musicTimerRef.current = null;
+            if (audio) {
+                audio.pause();
             }
         };
-    }, [
-        musicEnabled,
-        getAudioContext,
-    ]);
+    }, [musicEnabled]);
 
     // =========================================================
-    // UNLOCK WEB AUDIO
+    // UNLOCK AUDIO & CLEANUP ON UNMOUNT
     // =========================================================
 
     useEffect(() => {
         const handleGesture = () => {
             resumeAudio();
+            if (musicEnabled && bgAudioRef.current && bgAudioRef.current.paused) {
+                bgAudioRef.current.play().catch(() => {});
+            }
         };
 
         window.addEventListener(
@@ -322,10 +245,10 @@ function GameScreen() {
                 handleGesture
             );
 
-            if (musicTimerRef.current) {
-                clearInterval(
-                    musicTimerRef.current
-                );
+            if (bgAudioRef.current) {
+                bgAudioRef.current.pause();
+                bgAudioRef.current.currentTime = 0;
+                bgAudioRef.current = null;
             }
 
             if (
@@ -338,7 +261,7 @@ function GameScreen() {
                     .catch(() => {});
             }
         };
-    }, [resumeAudio]);
+    }, [musicEnabled, resumeAudio]);
 
     // =========================================================
     // FIREBASE LIVE GAME LISTENER
@@ -390,7 +313,7 @@ function GameScreen() {
     }, [pin, navigate]);
 
     // =========================================================
-    // CURRENT QUESTION
+    // CURRENT QUESTION & OPTIONS
     // =========================================================
 
     const currentQuestionIndex =
@@ -404,56 +327,66 @@ function GameScreen() {
         ];
 
     const questionText =
-        typeof question?.question ===
-        "object"
+        typeof question?.question === "object"
             ? question?.question?.text
             : question?.questionText ||
               question?.question ||
               "";
 
-    const correctOption =
-        typeof question?.correctAnswer ===
-        "number"
-            ? question?.options?.[
-                  question.correctAnswer
-              ]
-            : question?.correctAnswer;
+    const rawOptions = useMemo(() => {
+        if (!question) return [];
+        if (Array.isArray(question.options) && question.options.length > 0) {
+            return question.options.map((opt) =>
+                typeof opt === "object" ? opt.text || String(opt) : String(opt)
+            ).filter(Boolean);
+        }
+        if (Array.isArray(question.incorrectAnswers) && question.correctAnswer) {
+            const correctText =
+                typeof question.correctAnswer === "object"
+                    ? question.correctAnswer.text
+                    : String(question.correctAnswer);
+            const incorrects = question.incorrectAnswers.map((opt) =>
+                typeof opt === "object" ? opt.text || String(opt) : String(opt)
+            );
+            return [...incorrects, correctText].filter(Boolean);
+        }
+        return [];
+    }, [question]);
 
-    // =========================================================
-    // SHUFFLE OPTIONS
-    // =========================================================
+    const correctOption = useMemo(() => {
+        if (!question) return "";
+        const ca = question.correctAnswer;
+        if (typeof ca === "number" && rawOptions[ca] !== undefined) {
+            return rawOptions[ca];
+        }
+        if (typeof ca === "string") {
+            const parsed = parseInt(ca, 10);
+            if (!isNaN(parsed) && String(parsed) === ca.trim() && rawOptions[parsed] !== undefined) {
+                return rawOptions[parsed];
+            }
+            return ca;
+        }
+        return ca || "";
+    }, [question, rawOptions]);
+
+    const rawOptionsKey = rawOptions.join("|||");
 
     useEffect(() => {
-        const options =
-            Array.isArray(
-                question?.options
-            )
-                ? [...question.options]
-                : [];
-
-        for (
-            let i = options.length - 1;
-            i > 0;
-            i -= 1
-        ) {
-            const j = Math.floor(
-                Math.random() *
-                    (i + 1)
-            );
-
-            [
-                options[i],
-                options[j],
-            ] = [
-                options[j],
-                options[i],
-            ];
+        if (rawOptions.length === 0) {
+            setShuffledOptions([]);
+            return;
         }
 
-        setShuffledOptions(
-            options
-        );
-    }, [currentQuestionIndex]);
+        const options = [...rawOptions];
+        for (let i = options.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [options[i], options[j]] = [options[j], options[i]];
+        }
+
+        setShuffledOptions(options);
+    }, [currentQuestionIndex, rawOptionsKey, rawOptions]);
+
+    const displayOptions = shuffledOptions.length > 0 ? shuffledOptions : rawOptions;
 
     // =========================================================
     // TIMER
@@ -465,7 +398,7 @@ function GameScreen() {
     const questionDuration =
         gameData?.questionDuration ||
         question?.timer ||
-        20;
+        15;
 
     const questionStartedAt =
         gameData?.questionStartedAt;
@@ -481,7 +414,7 @@ function GameScreen() {
         const duration =
             Number(
                 questionDuration
-            ) || 20;
+            ) || 15;
 
         const startedAt =
             questionStartedAt ||
@@ -537,20 +470,18 @@ function GameScreen() {
         const me =
             gameData.players.find(
                 (p) =>
-                    p.id ===
-                        localPlayerId ||
-                    p.nickname ===
-                        localPlayerNickname
+                    String(p.id) === String(localPlayerId) ||
+                    (p.nickname && localPlayerNickname && p.nickname.toLowerCase() === localPlayerNickname.toLowerCase())
             );
 
         if (me) {
-            setSubmitted(
-                !!me.answered
-            );
+            if (me.answered) {
+                setSubmitted(true);
+            }
 
-            setSelectedAnswer(
-                me.answer || ""
-            );
+            if (me.answer) {
+                setSelectedAnswer(me.answer);
+            }
 
             if (
                 me.correct !==
@@ -602,10 +533,6 @@ function GameScreen() {
             // for next Firebase update
             previousStreakRef.current =
                 currentStreak;
-        } else {
-            setSubmitted(false);
-            setSelectedAnswer("");
-            setIsCorrect(null);
         }
     }, [
         gameData?.players,
@@ -634,12 +561,204 @@ function GameScreen() {
     }, [currentQuestionIndex]);
 
     // =========================================================
-    // ANSWER SELECT
+    // ANSWER SUBMIT & SELECT
     // =========================================================
 
-    const handleAnswer = (
-        answer
-    ) => {
+    const submitAnswer = async (chosenAnswer) => {
+        resumeAudio();
+
+        const targetAnswer = chosenAnswer || selectedAnswer;
+
+        if (
+            !targetAnswer ||
+            timeLeft === 0 ||
+            !pin ||
+            !question
+        ) {
+            return;
+        }
+
+        // Lock UI immediately so user cannot change answer
+        setSubmitted(true);
+        setSelectedAnswer(targetAnswer);
+
+        try {
+            const answerIsCorrect =
+                targetAnswer ===
+                correctOption;
+
+            setIsCorrect(
+                answerIsCorrect
+            );
+
+            const duration =
+                gameData?.questionDuration ||
+                question?.timer ||
+                15;
+
+            const speedBonus =
+                answerIsCorrect &&
+                duration > 0
+                    ? Math.max(
+                          0,
+                          Math.round(
+                              (timeLeft /
+                                  duration) *
+                                  500
+                          )
+                      )
+                    : 0;
+
+            const pointsEarned =
+                answerIsCorrect
+                    ? 500 +
+                      speedBonus
+                    : 0;
+
+            const gameRef =
+                doc(
+                    db,
+                    "games",
+                    pin
+                );
+
+            await runTransaction(
+                db,
+                async (
+                    transaction
+                ) => {
+                    const gameSnap =
+                        await transaction.get(
+                            gameRef
+                        );
+
+                    if (
+                        !gameSnap.exists()
+                    ) {
+                        return;
+                    }
+
+                    const liveData =
+                        gameSnap.data();
+
+                    const livePlayers =
+                        liveData.players ||
+                        [];
+
+                    const updatedPlayers =
+                        livePlayers.map(
+                            (
+                                player
+                            ) => {
+                                const isTargetPlayer =
+                                    String(player.id) ===
+                                        String(localPlayerId ||
+                                            currentPlayer?.id) ||
+                                    (player.nickname &&
+                                        (player.nickname === localPlayerNickname ||
+                                            player.nickname === currentPlayer?.nickname));
+
+                                if (
+                                    !isTargetPlayer
+                                ) {
+                                    return player;
+                                }
+
+                                // Prevent duplicate scoring
+                                if (
+                                    player.scoredForQuestion ===
+                                    currentQuestionIndex
+                                ) {
+                                    return player;
+                                }
+
+                                // ====================================
+                                // STREAK CALCULATION
+                                // ====================================
+
+                                const previousStreak =
+                                    player.currentStreak ||
+                                    0;
+
+                                const newStreak =
+                                    answerIsCorrect
+                                        ? previousStreak +
+                                          1
+                                        : 0;
+
+                                const bestStreak =
+                                    Math.max(
+                                        player.bestStreak ||
+                                            0,
+                                        newStreak
+                                    );
+
+                                return {
+                                    ...player,
+
+                                    answer:
+                                        targetAnswer,
+
+                                    answered:
+                                        true,
+
+                                    correct:
+                                        answerIsCorrect,
+
+                                    timeRemaining:
+                                        timeLeft,
+
+                                    score:
+                                        (player.score ||
+                                            0) +
+                                        pointsEarned,
+
+                                    correctCount:
+                                        (player.correctCount ||
+                                            0) +
+                                        (answerIsCorrect
+                                            ? 1
+                                            : 0),
+
+                                    wrongCount:
+                                        (player.wrongCount ||
+                                            0) +
+                                        (answerIsCorrect
+                                            ? 0
+                                            : 1),
+
+                                    // Current streak
+                                    currentStreak:
+                                        newStreak,
+
+                                    // Highest streak
+                                    bestStreak:
+                                        bestStreak,
+
+                                    scoredForQuestion:
+                                        currentQuestionIndex,
+                                };
+                            }
+                        );
+
+                    transaction.update(
+                        gameRef,
+                        {
+                            players:
+                                updatedPlayers,
+                        }
+                    );
+                }
+            );
+        } catch (error) {
+            console.error(
+                "Answer submit transaction error:",
+                error
+            );
+        }
+    };
+
+    const handleAnswer = (answer) => {
         resumeAudio();
 
         if (
@@ -650,213 +769,14 @@ function GameScreen() {
             return;
         }
 
-        setSelectedAnswer(
-            answer
-        );
+        setSelectedAnswer(answer);
+        setSubmitted(true);
+        submitAnswer(answer);
     };
 
     // =========================================================
-    // ANSWER SUBMIT
+    // STATS
     // =========================================================
-
-    const submitAnswer =
-        async () => {
-            resumeAudio();
-
-            if (
-                selectedAnswer ===
-                    "" ||
-                submitted ||
-                timeLeft === 0 ||
-                !pin ||
-                !question
-            ) {
-                return;
-            }
-
-            // Lock UI immediately
-            setSubmitted(true);
-
-            try {
-                const answerIsCorrect =
-                    selectedAnswer ===
-                    correctOption;
-
-                setIsCorrect(
-                    answerIsCorrect
-                );
-
-                const duration =
-                    gameData?.questionDuration ||
-                    question?.timer ||
-                    20;
-
-                const speedBonus =
-                    answerIsCorrect &&
-                    duration > 0
-                        ? Math.max(
-                              0,
-                              Math.round(
-                                  (timeLeft /
-                                      duration) *
-                                      500
-                              )
-                          )
-                        : 0;
-
-                const pointsEarned =
-                    answerIsCorrect
-                        ? 500 +
-                          speedBonus
-                        : 0;
-
-                const gameRef =
-                    doc(
-                        db,
-                        "games",
-                        pin
-                    );
-
-                await runTransaction(
-                    db,
-                    async (
-                        transaction
-                    ) => {
-                        const gameSnap =
-                            await transaction.get(
-                                gameRef
-                            );
-
-                        if (
-                            !gameSnap.exists()
-                        ) {
-                            return;
-                        }
-
-                        const liveData =
-                            gameSnap.data();
-
-                        const livePlayers =
-                            liveData.players ||
-                            [];
-
-                        const updatedPlayers =
-                            livePlayers.map(
-                                (
-                                    player
-                                ) => {
-                                    const isTargetPlayer =
-                                        player.id ===
-                                            (localPlayerId ||
-                                                currentPlayer?.id) ||
-                                        player.nickname ===
-                                            (localPlayerNickname ||
-                                                currentPlayer?.nickname);
-
-                                    if (
-                                        !isTargetPlayer
-                                    ) {
-                                        return player;
-                                    }
-
-                                    // Prevent duplicate scoring
-                                    if (
-                                        player.scoredForQuestion ===
-                                        currentQuestionIndex
-                                    ) {
-                                        return player;
-                                    }
-
-                                    // ====================================
-                                    // STREAK CALCULATION
-                                    // ====================================
-
-                                    const previousStreak =
-                                        player.currentStreak ||
-                                        0;
-
-                                    const newStreak =
-                                        answerIsCorrect
-                                            ? previousStreak +
-                                              1
-                                            : 0;
-
-                                    const bestStreak =
-                                        Math.max(
-                                            player.bestStreak ||
-                                                0,
-                                            newStreak
-                                        );
-
-                                    return {
-                                        ...player,
-
-                                        answer:
-                                            selectedAnswer,
-
-                                        answered:
-                                            true,
-
-                                        correct:
-                                            answerIsCorrect,
-
-                                        timeRemaining:
-                                            timeLeft,
-
-                                        score:
-                                            (player.score ||
-                                                0) +
-                                            pointsEarned,
-
-                                        correctCount:
-                                            (player.correctCount ||
-                                                0) +
-                                            (answerIsCorrect
-                                                ? 1
-                                                : 0),
-
-                                        wrongCount:
-                                            (player.wrongCount ||
-                                                0) +
-                                            (answerIsCorrect
-                                                ? 0
-                                                : 1),
-
-                                        // Current streak
-                                        currentStreak:
-                                            newStreak,
-
-                                        // Highest streak
-                                        bestStreak:
-                                            bestStreak,
-
-                                        scoredForQuestion:
-                                            currentQuestionIndex,
-                                    };
-                                }
-                            );
-
-                        transaction.update(
-                            gameRef,
-                            {
-                                players:
-                                    updatedPlayers,
-                            }
-                        );
-                    }
-                );
-            } catch (error) {
-                setSubmitted(
-                    false
-                );
-
-                console.error(
-                    "Answer submit transaction error:",
-                    error
-                );
-            }
-        };
-
 
     const correctAnswersCount =
         gameData?.players?.filter(
@@ -871,9 +791,8 @@ function GameScreen() {
         gameData?.players?.filter(
             (p) =>
                 p.answered &&
-                (p.answer !==
-                    correctOption ||
-                    p.correct === false)
+                (p.correct === false ||
+                    (p.correct === undefined && p.answer !== correctOption))
         ).length || 0;
 
     // =========================================================
@@ -919,10 +838,11 @@ function GameScreen() {
             <Podium
                 winners={sorted.map(
                     (p) => ({
+                        ...p,
                         id: p.id,
-                        name: p.nickname,
+                        name: p.nickname || p.name || "Player",
                         nickname:
-                            p.nickname,
+                            p.nickname || p.name || "Player",
                         score:
                             p.score || 0,
                     })
@@ -954,14 +874,14 @@ function GameScreen() {
     }
 
     const avatars = [
-        <FaStar />,
-        <FaGamepad />,
-        <FaRocket />,
-        <FaCrown />,
-        <FaStar />,
-        <FaFire />,
-        <FaBullseye />,
-        <FaBolt />,
+        <FaStar key="star1" />,
+        <FaGamepad key="gamepad" />,
+        <FaRocket key="rocket" />,
+        <FaCrown key="crown" />,
+        <FaStar key="star2" />,
+        <FaFire key="fire" />,
+        <FaBullseye key="bullseye" />,
+        <FaBolt key="bolt" />,
     ];
 
     const isAnswerRevealed =
@@ -1215,7 +1135,7 @@ function GameScreen() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 my-6">
 
-                        {shuffledOptions.map(
+                        {displayOptions.map(
                             (
                                 option,
                                 idx
@@ -1308,7 +1228,7 @@ function GameScreen() {
 
                                 return (
                                     <button
-                                        key={`${currentQuestionIndex}-${option}`}
+                                        key={`${currentQuestionIndex}-${idx}-${option}`}
                                         type="button"
                                         onClick={() =>
                                             handleAnswer(
