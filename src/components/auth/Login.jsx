@@ -1,24 +1,98 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { auth, db } from "../../firebase/firebase";
+
+// Helper for human-readable Firebase Auth error messages
+const getFriendlyErrorMessage = (error) => {
+  if (!error) return "An error occurred.";
+  const code = error.code || "";
+
+  switch (code) {
+    case "auth/user-not-found":
+      return "No account found with this email or username.";
+    case "auth/wrong-password":
+      return "Incorrect password. Please try again.";
+    case "auth/invalid-credential":
+      return "Invalid email/username or password.";
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/user-disabled":
+      return "This account has been disabled.";
+    case "auth/too-many-requests":
+      return "Too many failed attempts. Please wait a moment and try again.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection.";
+    default:
+      return error.message || "Failed to login. Please try again.";
+  }
+};
 
 function Login() {
-  const [email, setEmail] = useState("");
+  const [emailOrUsername, setEmailOrUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password.trim()) {
+    if (!emailOrUsername.trim() || !password.trim()) {
       setError("Please fill in all fields");
       return;
     }
 
-    localStorage.setItem("userLoggedIn", "true");
-    localStorage.setItem("userEmail", email);
-    navigate("/game-options");
+    try {
+      setLoading(true);
+      let emailToUse = emailOrUsername.trim();
+
+      // If user typed a nickname instead of email, find corresponding email in Firestore
+      if (!emailToUse.includes("@")) {
+        const q = query(
+          collection(db, "users"),
+          where("nickname", "==", emailToUse)
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          emailToUse = querySnapshot.docs[0].data().email;
+        }
+      }
+
+      // 1. Sign in with Firebase Authentication
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        emailToUse,
+        password
+      );
+      const loggedUser = userCredential.user;
+
+      // 2. Fetch user's role from Firestore users collection
+      const userDocRef = doc(db, "users", loggedUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      let savedRole = "";
+      if (userDocSnap.exists()) {
+        savedRole = userDocSnap.data().role || "";
+      }
+
+      // 3. Redirect user based on their saved role
+      if (savedRole === "Host") {
+        navigate("/host/create");
+      } else if (savedRole === "Player") {
+        navigate("/player/join");
+      } else {
+        navigate("/game-options");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError(getFriendlyErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -37,14 +111,12 @@ function Login() {
 
       {/* Hero Logo Section */}
       <div className="relative flex flex-col items-center mt-2 z-10">
-        {/* Mascot Icon */}
         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-linear-to-b from-indigo-600 via-purple-800 to-purple-950 border-2 border-purple-400/70 flex items-center justify-center shadow-[0_0_30px_rgba(168,85,247,0.4)] relative mb-2 group hover:scale-105 transition-transform duration-300">
           <span className="text-4xl sm:text-5xl drop-shadow-md">🦉</span>
           <span className="absolute -top-2 -right-1 text-xl animate-pulse">💡</span>
           <span className="absolute -top-3 -left-1 text-lg">🎓</span>
         </div>
 
-        {/* Project Title & Subtitle */}
         <div className="text-center">
           <h1
             className="text-3xl sm:text-5xl font-black tracking-wider uppercase bg-linear-to-b from-yellow-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent drop-shadow-[0_4px_12px_rgba(234,179,8,0.5)]"
@@ -62,10 +134,8 @@ function Login() {
 
       {/* Central Login Card */}
       <div className="w-full max-w-md my-6 relative z-10">
-        {/* Glassmorphism Card Container */}
         <div className="bg-[#120a2e]/90 border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(147,51,234,0.35)] backdrop-blur-xl relative">
           
-          {/* Tab Selection */}
           <div className="flex bg-[#1b113e] p-1 rounded-2xl mb-6 border border-purple-800/60">
             <button
               type="button"
@@ -89,7 +159,6 @@ function Login() {
           </p>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            {/* Email or Username */}
             <div>
               <label className="block text-xs font-semibold text-purple-300 uppercase tracking-wider mb-1.5">
                 Email or Username
@@ -98,15 +167,14 @@ function Login() {
                 <span className="absolute left-3.5 text-purple-400 text-lg">👤</span>
                 <input
                   type="text"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={emailOrUsername}
+                  onChange={(e) => setEmailOrUsername(e.target.value)}
                   placeholder="Enter email or username"
                   className="w-full bg-[#1b113e] border border-purple-800/60 focus:border-purple-400 text-white placeholder-purple-400/40 rounded-xl pl-11 pr-4 py-3.5 outline-none font-semibold text-sm sm:text-base transition-all duration-200 focus:ring-2 focus:ring-purple-500/40 shadow-inner"
                 />
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="block text-xs font-semibold text-purple-300 uppercase tracking-wider mb-1.5">
                 Password
@@ -123,21 +191,29 @@ function Login() {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="bg-red-500/20 border border-red-500/60 text-red-300 text-xs py-2.5 px-4 rounded-xl text-center font-medium shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse">
                 {error}
               </div>
             )}
 
-            {/* Submit Button */}
             <button
               type="submit"
-              className="w-full mt-2 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer"
+              disabled={loading}
+              className="w-full mt-2 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>⚡</span>
-              <span>Login to Quiz Arena</span>
-              <span className="text-xl">➔</span>
+              {loading ? (
+                <>
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950/30 border-t-slate-950"></span>
+                  <span>Logging in...</span>
+                </>
+              ) : (
+                <>
+                  <span>⚡</span>
+                  <span>Login to Quiz Arena</span>
+                  <span className="text-xl">➔</span>
+                </>
+              )}
             </button>
           </form>
 
