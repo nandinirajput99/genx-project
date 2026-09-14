@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { getRandomQuestions } from "../data/questionBank";
 
 const initialState = {
   quizId: "",
@@ -6,23 +7,47 @@ const initialState = {
   questions: [],
   loading: false,
   error: null,
+  source: null, // "api" | "bank"
 };
 
-// API se questions fetch
+// API se questions fetch with automatic fallback to rich question bank
 export const fetchQuestions = createAsyncThunk(
   "quiz/fetchQuestions",
-  async () => {
-    const response = await fetch(
-      "https://the-trivia-api.com/v2/questions?limit=10"
-    );
+  async (category = "all") => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch questions");
+      let url = "https://the-trivia-api.com/v2/questions?limit=10";
+      if (category && category !== "all") {
+        url += `&categories=${category}`;
+      }
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return {
+            questions: data,
+            source: "api",
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "Remote Trivia API unreachable or blocked by network, using built-in Question Bank:",
+        err?.message || err
+      );
     }
 
-    const data = await response.json();
-
-    return data;
+    // Always guarantee instant, high-quality questions from internal question bank
+    const fallbackQuestions = getRandomQuestions(category, 10);
+    return {
+      questions: fallbackQuestions,
+      source: "bank",
+    };
   }
 );
 
@@ -50,6 +75,8 @@ const quizSlice = createSlice({
       state.quizId = "";
       state.title = "";
       state.questions = [];
+      state.source = null;
+      state.error = null;
     },
   },
 
@@ -62,12 +89,17 @@ const quizSlice = createSlice({
 
       .addCase(fetchQuestions.fulfilled, (state, action) => {
         state.loading = false;
-        state.questions = action.payload;
+        state.error = null;
+        state.questions = action.payload.questions || action.payload;
+        state.source = action.payload.source || "bank";
       })
 
-      .addCase(fetchQuestions.rejected, (state, action) => {
+      .addCase(fetchQuestions.rejected, (state) => {
+        // Even in unexpected edge cases, fall back to question bank
         state.loading = false;
-        state.error = action.error.message;
+        state.error = null;
+        state.questions = getRandomQuestions("all", 10);
+        state.source = "bank";
       });
   },
 });
