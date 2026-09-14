@@ -1,14 +1,39 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "../../firebase/firebase";
+
+// Helper for human-readable Firebase Auth error messages
+const getFriendlyErrorMessage = (error) => {
+  if (!error) return "An error occurred.";
+  const code = error.code || "";
+
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "This email address is already registered. Please log in.";
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+    case "auth/operation-not-allowed":
+      return "Email/password accounts are not enabled in Firebase.";
+    case "auth/weak-password":
+      return "Password is too weak. Please use at least 6 characters.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your internet connection.";
+    default:
+      return error.message || "Failed to create account. Please try again.";
+  }
+};
 
 function SignUp() {
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSignUp = (e) => {
+  const handleSignUp = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -17,10 +42,44 @@ function SignUp() {
       return;
     }
 
-    localStorage.setItem("userLoggedIn", "true");
-    localStorage.setItem("userNickname", nickname);
-    localStorage.setItem("userEmail", email);
-    navigate("/game-options");
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // 1. Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
+      const user = userCredential.user;
+
+      // 2. Update display name in Firebase Auth
+      await updateProfile(user, {
+        displayName: nickname.trim(),
+      });
+
+      // 3. Store user additional profile data in Firestore under "users" collection
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        nickname: nickname.trim(),
+        email: email.trim(),
+        role: "",
+        createdAt: new Date().toISOString(),
+      });
+
+      // 4. Navigate to game options
+      navigate("/game-options");
+    } catch (err) {
+      console.error("Signup error:", err);
+      setError(getFriendlyErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -31,14 +90,12 @@ function SignUp() {
 
       {/* Hero Logo Section */}
       <div className="relative flex flex-col items-center mt-2 z-10">
-        {/* Mascot Icon */}
         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-linear-to-b from-indigo-600 via-purple-800 to-purple-950 border-2 border-purple-400/70 flex items-center justify-center shadow-[0_0_30px_rgba(168,85,247,0.4)] relative mb-2 group hover:scale-105 transition-transform duration-300">
           <span className="text-4xl sm:text-5xl drop-shadow-md">🦉</span>
           <span className="absolute -top-2 -right-1 text-xl animate-pulse">👑</span>
           <span className="absolute -top-3 -left-1 text-lg">🎓</span>
         </div>
 
-        {/* Project Title & Subtitle */}
         <div className="text-center">
           <h1
             className="text-3xl sm:text-5xl font-black tracking-wider uppercase bg-linear-to-b from-yellow-200 via-amber-400 to-yellow-500 bg-clip-text text-transparent drop-shadow-[0_4px_12px_rgba(234,179,8,0.5)]"
@@ -56,10 +113,8 @@ function SignUp() {
 
       {/* Central SignUp Card */}
       <div className="w-full max-w-md my-6 relative z-10">
-        {/* Glassmorphism Card Container */}
         <div className="bg-[#120a2e]/90 border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(147,51,234,0.35)] backdrop-blur-xl relative">
           
-          {/* Tab Selection */}
           <div className="flex bg-[#1b113e] p-1 rounded-2xl mb-6 border border-purple-800/60">
             <Link
               to="/login"
@@ -83,7 +138,6 @@ function SignUp() {
           </p>
 
           <form onSubmit={handleSignUp} className="space-y-4">
-            {/* Nickname */}
             <div>
               <label className="block text-xs font-semibold text-purple-300 uppercase tracking-wider mb-1.5">
                 Nickname / Username
@@ -100,7 +154,6 @@ function SignUp() {
               </div>
             </div>
 
-            {/* Email */}
             <div>
               <label className="block text-xs font-semibold text-purple-300 uppercase tracking-wider mb-1.5">
                 Email Address
@@ -117,7 +170,6 @@ function SignUp() {
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="block text-xs font-semibold text-purple-300 uppercase tracking-wider mb-1.5">
                 Password
@@ -134,21 +186,29 @@ function SignUp() {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="bg-red-500/20 border border-red-500/60 text-red-300 text-xs py-2.5 px-4 rounded-xl text-center font-medium shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse">
                 {error}
               </div>
             )}
 
-            {/* Submit Button */}
             <button
               type="submit"
-              className="w-full mt-2 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer"
+              disabled={loading}
+              className="w-full mt-2 bg-linear-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 active:scale-[0.98] text-slate-950 font-black py-4 px-6 rounded-2xl shadow-[0_0_30px_rgba(250,204,21,0.5)] text-base sm:text-lg tracking-wide flex items-center justify-center space-x-2 transition-all duration-300 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>⚡</span>
-              <span>Create Free Account</span>
-              <span className="text-xl">➔</span>
+              {loading ? (
+                <>
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950/30 border-t-slate-950"></span>
+                  <span>Creating Account...</span>
+                </>
+              ) : (
+                <>
+                  <span>⚡</span>
+                  <span>Create Free Account</span>
+                  <span className="text-xl">➔</span>
+                </>
+              )}
             </button>
           </form>
 
