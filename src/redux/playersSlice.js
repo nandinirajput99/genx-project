@@ -16,7 +16,6 @@ const playersSlice = createSlice({
 
     // Add a new player
     addPlayer: (state, action) => {
-<<<<<<< HEAD
       const exists = state.players.some(
         (p) =>
           p.id === action.payload.id ||
@@ -24,27 +23,6 @@ const playersSlice = createSlice({
       );
       if (!exists) {
         state.players.push(action.payload);
-=======
-      const player = action.payload;
-
-      const exists = state.players.some(
-        (existingPlayer) => existingPlayer.id === player.id
-      );
-
-      if (!exists) {
-        state.players.push({
-          ...player,
-
-          score: player.score ?? 0,
-          streak: player.streak ?? 0,
-          bestStreak: player.bestStreak ?? 0,
-
-          answered: player.answered ?? false,
-
-          correctAnswers: player.correctAnswers ?? 0,
-          wrongAnswers: player.wrongAnswers ?? 0,
-        });
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
       }
     },
 

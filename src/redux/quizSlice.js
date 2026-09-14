@@ -40,7 +40,6 @@ const initialState = {
   source: null, // "api" | "bank"
 };
 
-<<<<<<< HEAD
 // API se questions fetch with automatic fallback to rich question bank
 export const fetchQuestions = createAsyncThunk(
   "quiz/fetchQuestions",
@@ -79,33 +78,6 @@ export const fetchQuestions = createAsyncThunk(
       questions: fallbackQuestions,
       source: "bank",
     };
-=======
-// ======================================================
-// FETCH QUESTIONS FROM TRIVIA API
-// ======================================================
-
-export const fetchQuestions = createAsyncThunk(
-  "quiz/fetchQuestions",
-
-  async (_, thunkAPI) => {
-    try {
-      const response = await fetch(
-        "https://the-trivia-api.com/v2/questions?limit=10"
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch questions");
-      }
-
-      const data = await response.json();
-
-      return data;
-    } catch (error) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to fetch questions"
-      );
-    }
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
   }
 );
 
@@ -305,46 +277,8 @@ const quizSlice = createSlice({
       state.quizId = "";
       state.title = "";
       state.questions = [];
-<<<<<<< HEAD
       state.source = null;
       state.error = null;
-=======
-
-      state.visibility = "public";
-      state.pin = "";
-
-      state.currentQuiz = null;
-      state.createdQuiz = null;
-
-      state.error = null;
-    },
-
-    // ==================================================
-    // CLEAR ERROR
-    // ==================================================
-
-    clearQuizError: (state) => {
-      state.error = null;
-    },
-
-    // ==================================================
-    // SET CURRENT QUIZ
-    // ==================================================
-
-    setCurrentQuiz: (state, action) => {
-      const quiz = action.payload;
-
-      state.currentQuiz = quiz;
-
-      state.quizId = quiz.id || "";
-      state.title = quiz.title || "";
-      state.questions = quiz.questions || [];
-
-      state.visibility =
-        quiz.visibility || "public";
-
-      state.pin = quiz.pin || "";
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
     },
   },
 
@@ -373,115 +307,9 @@ const quizSlice = createSlice({
       .addCase(fetchQuestions.rejected, (state) => {
         // Even in unexpected edge cases, fall back to question bank
         state.loading = false;
-<<<<<<< HEAD
         state.error = null;
         state.questions = getRandomQuestions("all", 10);
         state.source = "bank";
-=======
-
-        state.error =
-          action.payload ||
-          action.error.message ||
-          "Failed to fetch questions";
-      });
-
-    // ==================================================
-    // CREATE QUIZ
-    // ==================================================
-
-    builder
-      .addCase(createQuiz.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-
-      .addCase(createQuiz.fulfilled, (state, action) => {
-        state.loading = false;
-
-        // Store created quiz
-        state.createdQuiz = action.payload;
-
-        // Make it current quiz
-        state.currentQuiz = action.payload;
-
-        // Update main quiz state
-        state.quizId = action.payload.id;
-        state.title = action.payload.title;
-        state.questions = action.payload.questions;
-        state.visibility = action.payload.visibility;
-        state.pin = action.payload.pin || "";
-      })
-
-      .addCase(createQuiz.rejected, (state, action) => {
-        state.loading = false;
-
-        state.error =
-          action.payload ||
-          action.error.message ||
-          "Failed to create quiz";
-      });
-
-    // ==================================================
-    // FETCH PUBLIC QUIZZES
-    // ==================================================
-
-    builder
-      .addCase(fetchPublicQuizzes.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-
-      .addCase(fetchPublicQuizzes.fulfilled, (state, action) => {
-        state.loading = false;
-        state.publicQuizzes = action.payload;
-      })
-
-      .addCase(fetchPublicQuizzes.rejected, (state, action) => {
-        state.loading = false;
-
-        state.error =
-          action.payload ||
-          action.error.message ||
-          "Failed to fetch public quizzes";
-      });
-
-    // ==================================================
-    // FETCH PRIVATE QUIZ
-    // ==================================================
-
-    builder
-      .addCase(fetchPrivateQuiz.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-
-      .addCase(fetchPrivateQuiz.fulfilled, (state, action) => {
-        state.loading = false;
-
-        // Store selected quiz
-        state.currentQuiz = action.payload;
-
-        // Update main quiz state
-        state.quizId = action.payload.id;
-        state.title = action.payload.title;
-        state.questions =
-          action.payload.questions || [];
-
-        state.visibility =
-          action.payload.visibility || "private";
-
-        state.pin =
-          action.payload.pin || "";
-      })
-
-      .addCase(fetchPrivateQuiz.rejected, (state, action) => {
-        state.loading = false;
-
-        state.error =
-          action.payload ||
-          action.error.message ||
-          "Failed to find private quiz";
->>>>>>> 060ce249aac318f36c86d42b3e91e5e77170aa9b
       });
   },
 });

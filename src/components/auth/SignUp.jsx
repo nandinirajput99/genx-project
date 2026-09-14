@@ -33,17 +33,7 @@ function SignUp() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-<<<<<<< HEAD
   const handleSignUp = async (e) => {
-=======
-  useEffect(() => {
-    if (localStorage.getItem("userLoggedIn") === "true") {
-      navigate("/game-options");
-    }
-  }, [navigate]);
-
-  const handleSignUp = (e) => {
->>>>>>> ad55f99b68cba57c7bf486be9de1c3ec6f4336d3
     e.preventDefault();
     setError("");
 

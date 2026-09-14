@@ -36,17 +36,7 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-<<<<<<< HEAD
   const handleLogin = async (e) => {
-=======
-  useEffect(() => {
-    if (localStorage.getItem("userLoggedIn") === "true") {
-      navigate("/game-options");
-    }
-  }, [navigate]);
-
-  const handleLogin = (e) => {
->>>>>>> ad55f99b68cba57c7bf486be9de1c3ec6f4336d3
     e.preventDefault();
     setError("");
 
@@ -55,7 +45,6 @@ function Login() {
       return;
     }
 
-<<<<<<< HEAD
     try {
       setLoading(true);
       let emailToUse = emailOrUsername.trim();
@@ -104,15 +93,6 @@ function Login() {
     } finally {
       setLoading(false);
     }
-=======
-    localStorage.setItem("userLoggedIn", "true");
-    localStorage.setItem("userEmail", email);
-    const derivedNick = email.includes("@") ? email.split("@")[0] : email;
-    if (!localStorage.getItem("userNickname")) {
-      localStorage.setItem("userNickname", derivedNick);
-    }
-    navigate("/game-options");
->>>>>>> ad55f99b68cba57c7bf486be9de1c3ec6f4336d3
   };
 
   return (
