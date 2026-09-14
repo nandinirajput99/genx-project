@@ -1,359 +1,1089 @@
 import React, { useEffect, useState } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { db } from "../../firebase/firebase";
+import { useDispatch, useSelector } from "react-redux";
+import { useNavigate, useParams } from "react-router-dom";
+
 import {
+  collection,
   doc,
   getDoc,
-  setDoc,
-  updateDoc,
-  arrayUnion,
   onSnapshot,
+  setDoc,
 } from "firebase/firestore";
 
-import { setPlayers, addPlayer } from "../../redux/playersSlice";
-import { setGame, setGameStatus, resetGame } from "../../redux/gameSlice";
+import { db } from "../../firebase/firebase";
 
-export default function HostLobby({ quizId }) {
+import {
+  setGame,
+  setGameStatus,
+  resetGame,
+} from "../../redux/gameSlice";
+
+import {
+  setPlayers,
+  clearPlayers,
+} from "../../redux/playersSlice";
+
+import {
+  setQuiz,
+} from "../../redux/quizSlice";
+
+
+// --------------------------------------------------
+// Generate 6 Digit Game PIN
+// --------------------------------------------------
+
+const generateGamePin = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+
+// --------------------------------------------------
+// HostLobby Component
+// --------------------------------------------------
+
+const HostLobby = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const { quizId: routeQuizId } = useParams();
+
+  const reduxQuizId = useSelector((state) => state.quiz.quizId);
+  const reduxQuizTitle = useSelector((state) => state.quiz.title);
+  const reduxQuestions = useSelector((state) => state.quiz.questions);
+
   const game = useSelector((state) => state.game);
   const players = useSelector((state) => state.players.players);
-  const reduxQuizId = useSelector((state) => state.quiz.quizId);
 
-  const [pin, setPin] = useState("");
+  const [quizData, setQuizData] = useState(null);
+
   const [loading, setLoading] = useState(true);
+  const [creatingGame, setCreatingGame] = useState(false);
+
+  const [error, setError] = useState("");
+
+  const [gameCreated, setGameCreated] = useState(false);
+
   const [copied, setCopied] = useState(false);
-  const [starting, setStarting] = useState(false);
 
-  const activeQuizId = quizId || reduxQuizId || "default_quiz";
 
-  // Web Audio sound for lobby events
-  const playChime = (type = "join") => {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+  // --------------------------------------------------
+  // Decide Quiz ID
+  // --------------------------------------------------
 
-      osc.type = "sine";
-      if (type === "join") {
-        osc.frequency.setValueAtTime(440, now);
-        osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
-      } else {
-        osc.frequency.setValueAtTime(523.25, now);
-        osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.25);
-      }
+  const activeQuizId =
+    routeQuizId ||
+    reduxQuizId ||
+    localStorage.getItem("selectedQuizId");
 
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.25);
-    } catch {
-      // Audio error ignored
-    }
-  };
+  // --------------------------------------------------
+  // Fetch Quiz
+  // --------------------------------------------------
 
-  // 1. Generate PIN and create fresh waiting game session
   useEffect(() => {
-    dispatch(resetGame());
-
-    if (!activeQuizId) {
-      console.error("Quiz ID is missing");
-      setLoading(false);
-      return;
-    }
-
-    const generatedPin = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
-
-    setPin(generatedPin);
-    localStorage.setItem("hostPin", generatedPin);
-    localStorage.setItem("gamePin", generatedPin);
-
-    const createGame = async () => {
+    const loadQuiz = async () => {
       try {
-        const quizRef = doc(db, "quizzes", activeQuizId);
-        const quizSnap = await getDoc(quizRef);
-        const quizData = quizSnap.exists() ? quizSnap.data() : { questions: [] };
+        setLoading(true);
+        setError("");
 
-        const gameData = {
-          gameId: generatedPin,
-          pin: generatedPin,
-          quizId: activeQuizId,
-          status: "waiting",
-          currentQuestionIndex: 0,
-          questionStartedAt: null,
-          answerRevealed: false,
-          players: [],
-          questions: quizData.questions || [],
+        if (!activeQuizId) {
+          throw new Error("Quiz ID not found.");
+        }
+
+        // First try Redux data
+        if (
+          reduxQuestions &&
+          reduxQuestions.length > 0 &&
+          reduxQuizId === activeQuizId
+        ) {
+          const localQuiz = {
+            id: activeQuizId,
+            title: reduxQuizTitle || "Untitled Quiz",
+            questions: reduxQuestions,
+          };
+
+          setQuizData(localQuiz);
+
+          setLoading(false);
+          return;
+        }
+
+        // Otherwise fetch from Firestore
+        const quizRef = doc(db, "quizzes", activeQuizId);
+
+        const quizSnap = await getDoc(quizRef);
+
+        if (!quizSnap.exists()) {
+          throw new Error("Quiz not found in Firestore.");
+        }
+
+        const data = quizSnap.data();
+
+        const loadedQuiz = {
+          id: quizSnap.id,
+          ...data,
+          questions: Array.isArray(data.questions)
+            ? data.questions
+            : [],
         };
 
-        await setDoc(doc(db, "games", generatedPin), gameData);
+        setQuizData(loadedQuiz);
 
+        // Also store quiz in Redux
         dispatch(
-          setGame({
-            gameId: generatedPin,
-            pin: generatedPin,
-            quizId: activeQuizId,
-            status: "waiting",
-            currentQuestionIndex: 0,
-            questionStartedAt: null,
-            answerRevealed: false,
+          setQuiz({
+            quizId: quizSnap.id,
+            title: loadedQuiz.title || "Untitled Quiz",
+            questions: loadedQuiz.questions,
           })
         );
 
-        setLoading(false);
       } catch (err) {
-        console.error("Error creating game session:", err);
+        console.error("Quiz loading error:", err);
+
+        setError(
+          err.message || "Unable to load quiz."
+        );
+      } finally {
         setLoading(false);
       }
     };
 
-    createGame();
-  }, [activeQuizId, dispatch]);
+    loadQuiz();
+  }, [
+    activeQuizId,
+    reduxQuizId,
+    reduxQuizTitle,
+    reduxQuestions,
+    dispatch,
+  ]);
 
-  // 2. Real-time Firebase listener for joined players
-  useEffect(() => {
-    if (!pin) return;
 
-    const gameRef = doc(db, "games", pin);
+  // --------------------------------------------------
+  // Create Live Game
+  // --------------------------------------------------
 
-    const unsubscribe = onSnapshot(
-      gameRef,
-      (docSnap) => {
-        if (!docSnap.exists()) return;
-
-        const data = docSnap.data();
-
-        if (data.players) {
-          dispatch(setPlayers(data.players));
-        }
-
-        if (data.status && data.status !== "waiting" && data.status === "playing") {
-          navigate("/host/live");
-        }
-      },
-      (error) => {
-        console.error("Error listening to game lobby:", error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [pin, dispatch, navigate]);
-
-  // Copy PIN to clipboard
-  const handleCopyPin = () => {
-    if (!pin) return;
-    navigator.clipboard.writeText(pin);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Add demo bot player for 1-click solo testing
-  const handleAddDemoBot = async () => {
-    if (!pin) return;
-    const botPool = [
-      "Alex Gamer 🎮",
-      "Quiz Whiz 🧠",
-      "Speedy Spark ⚡",
-      "Neon Star ⭐",
-      "Lucky Champion 👑",
-      "Byte Boss 💻",
-    ];
-    const botName = botPool[players.length % botPool.length];
-    const newBot = {
-      id: "bot_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
-      nickname: botName,
-      score: 0,
-      correctCount: 0,
-      wrongCount: 0,
-      answered: false,
-      correct: null,
-    };
-
+  const createLiveGame = async () => {
     try {
-      await updateDoc(doc(db, "games", pin), {
-        players: arrayUnion(newBot),
-      });
-      dispatch(addPlayer(newBot));
-      playChime("join");
+      setCreatingGame(true);
+      setError("");
+
+      if (!quizData) {
+        throw new Error("Quiz data is not available.");
+      }
+
+      if (
+        !quizData.questions ||
+        quizData.questions.length === 0
+      ) {
+        throw new Error(
+          "This quiz does not contain any questions."
+        );
+      }
+
+      // Generate unique live game PIN
+      let generatedPin = "";
+
+      let existingGame = true;
+
+      // Try until unused PIN is found
+      while (existingGame) {
+        generatedPin = generateGamePin();
+
+        const gameRef = doc(
+          db,
+          "games",
+          generatedPin
+        );
+
+        const gameSnap = await getDoc(gameRef);
+
+        existingGame = gameSnap.exists();
+      }
+
+      const gameRef = doc(
+        db,
+        "games",
+        generatedPin
+      );
+
+      // Initial live game object
+      const newGame = {
+        gameId: generatedPin,
+
+        pin: generatedPin,
+
+        quizId: quizData.id,
+
+        title: quizData.title || "Quiz",
+
+        status: "waiting",
+
+        currentQuestionIndex: 0,
+
+        questionStartedAt: null,
+
+        questionDuration: 30,
+
+        answerRevealed: false,
+
+        questions: quizData.questions,
+
+        players: [],
+
+        createdAt: Date.now(),
+
+        hostConnected: true,
+      };
+
+      await setDoc(gameRef, newGame);
+
+      // Save game in Redux
+      dispatch(
+        setGame({
+          gameId: generatedPin,
+          pin: generatedPin,
+          quizId: quizData.id,
+          title: quizData.title || "Quiz",
+          status: "waiting",
+          currentQuestionIndex: 0,
+          questionStartedAt: null,
+          questionDuration: 30,
+          answerRevealed: false,
+          players: [],
+          questions: quizData.questions,
+        })
+      );
+
+      // Save selected game information locally
+      localStorage.setItem(
+        "hostGamePin",
+        generatedPin
+      );
+
+      localStorage.setItem(
+        "hostQuizId",
+        quizData.id
+      );
+
+      setGameCreated(true);
+
     } catch (err) {
-      console.error("Error adding demo bot:", err);
+      console.error("Game creation error:", err);
+
+      setError(
+        err.message ||
+        "Failed to create live game."
+      );
+    } finally {
+      setCreatingGame(false);
     }
   };
 
-  // Host starts the live game
-  const handleStartGame = async () => {
-    if (!pin) return;
 
-    if (players.length === 0) {
-      alert("Please wait for at least 1 player to join, or click 'Add Demo Bot' to test!");
+  // --------------------------------------------------
+  // Listen for Real-Time Game Updates
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!gameCreated || !game.pin) {
       return;
     }
 
-    try {
-      setStarting(true);
-      playChime("start");
+    const gameRef = doc(
+      db,
+      "games",
+      game.pin
+    );
 
-      const gameRef = doc(db, "games", pin);
+    const unsubscribe = onSnapshot(
+      gameRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setError("Live game no longer exists.");
+          return;
+        }
+
+        const data = snapshot.data();
+
+        // ------------------------------------------
+        // Update Redux Game
+        // ------------------------------------------
+
+        dispatch(
+          setGame({
+            ...data,
+            gameId: snapshot.id,
+            pin: data.pin || snapshot.id,
+          })
+        );
+
+
+        // ------------------------------------------
+        // Update Redux Players
+        // ------------------------------------------
+
+        const updatedPlayers =
+          Array.isArray(data.players)
+            ? data.players
+            : [];
+
+        dispatch(
+          setPlayers(updatedPlayers)
+        );
+
+
+        // ------------------------------------------
+        // If game started
+        // ------------------------------------------
+
+        if (data.status === "playing") {
+          dispatch(
+            setGameStatus("playing")
+          );
+
+          navigate("/host/live");
+        }
+
+
+        // ------------------------------------------
+        // If game finished
+        // ------------------------------------------
+
+        if (data.status === "finished") {
+          dispatch(
+            setGameStatus("finished")
+          );
+        }
+      },
+      (err) => {
+        console.error(
+          "Game listener error:",
+          err
+        );
+
+        setError(
+          "Unable to sync live game."
+        );
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+
+  }, [
+    gameCreated,
+    game.pin,
+    dispatch,
+    navigate,
+  ]);
+
+
+  // --------------------------------------------------
+  // Start Game
+  // --------------------------------------------------
+
+  const handleStartGame = async () => {
+    try {
+      setError("");
+
+      if (!game.pin) {
+        setError(
+          "Game PIN is not available."
+        );
+        return;
+      }
+
+      if (players.length === 0) {
+        setError(
+          "At least one player is required to start the game."
+        );
+        return;
+      }
+
+      const gameRef = doc(
+        db,
+        "games",
+        game.pin
+      );
 
       await setDoc(
         gameRef,
         {
           status: "playing",
+
           currentQuestionIndex: 0,
-          questionStartedAt: Date.now(),
-          questionDuration: 20,
-          timerActive: true,
+
+          questionStartedAt: null,
+
           answerRevealed: false,
+
+          hostConnected: true,
         },
-        { merge: true }
+        {
+          merge: true,
+        }
       );
 
-      dispatch(setGameStatus("playing"));
+      dispatch(
+        setGameStatus("playing")
+      );
+
       navigate("/host/live");
+
     } catch (err) {
-      console.error("Error starting game:", err);
-      alert("Failed to start game.");
-      setStarting(false);
+      console.error(
+        "Start game error:",
+        err
+      );
+
+      setError(
+        err.message ||
+        "Unable to start game."
+      );
     }
   };
 
-  return (
-    <div className="min-h-screen bg-linear-to-br from-indigo-950 via-purple-900 to-slate-950 px-4 py-8 sm:px-6 lg:px-8 flex flex-col justify-center items-center select-none">
-      <div className="mx-auto max-w-2xl w-full">
 
-        {/* Top Header Card */}
-        <div className="mb-6 text-center">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-200 backdrop-blur-md">
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-            Lobby Open &bull; Waiting for Players
-          </div>
+  // --------------------------------------------------
+  // Copy PIN
+  // --------------------------------------------------
 
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white">
-            Quiz Battle Lobby 🎮
-          </h1>
+  const handleCopyPin = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        game.pin
+      );
 
-          <p className="mt-2 text-sm text-slate-300">
-            Share the Game PIN below with your players so they can join the battle!
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+
+    } catch (err) {
+      console.error(
+        "Copy error:",
+        err
+      );
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Copy Join URL
+  // --------------------------------------------------
+
+  const handleCopyJoinLink = async () => {
+    try {
+      const joinUrl =
+        `${window.location.origin}/player/join`;
+
+      await navigator.clipboard.writeText(
+        joinUrl
+      );
+
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+
+    } catch (err) {
+      console.error(
+        "Join link copy error:",
+        err
+      );
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Leave Lobby
+  // --------------------------------------------------
+
+  const handleLeaveLobby = async () => {
+    try {
+      if (game.pin) {
+        const gameRef = doc(
+          db,
+          "games",
+          game.pin
+        );
+
+        await setDoc(
+          gameRef,
+          {
+            status: "cancelled",
+            hostConnected: false,
+          },
+          {
+            merge: true,
+          }
+        );
+      }
+
+      dispatch(resetGame());
+      dispatch(clearPlayers());
+
+      localStorage.removeItem(
+        "hostGamePin"
+      );
+
+      localStorage.removeItem(
+        "hostQuizId"
+      );
+
+      navigate("/host");
+
+    } catch (err) {
+      console.error(
+        "Leave lobby error:",
+        err
+      );
+
+      navigate("/host");
+    }
+  };
+
+
+  // --------------------------------------------------
+  // Loading Screen
+  // --------------------------------------------------
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
+
+        <div className="text-center">
+
+          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-5" />
+
+          <h2 className="text-xl font-bold">
+            Loading Quiz...
+          </h2>
+
+          <p className="text-slate-400 mt-2">
+            Preparing your host lobby
           </p>
+
         </div>
 
-        {/* Main Lobby Card */}
-        <div className="rounded-3xl border border-white/10 bg-white/10 p-6 sm:p-8 shadow-2xl backdrop-blur-xl text-center">
+      </div>
+    );
+  }
 
-          {/* Game PIN Display */}
-          <div className="mb-8">
-            <p className="text-xs font-bold uppercase tracking-widest text-indigo-300 mb-2">
-              GAME PIN
-            </p>
 
-            <div className="inline-flex flex-col sm:flex-row items-center gap-3 bg-slate-950/60 border-2 border-indigo-500/40 rounded-2xl p-4 sm:px-8 shadow-inner">
-              <span className="text-5xl sm:text-6xl font-black tracking-widest text-white drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]">
-                {loading ? "••••••" : pin}
-              </span>
+  // --------------------------------------------------
+  // Error Screen
+  // --------------------------------------------------
 
-              <button
-                onClick={handleCopyPin}
-                disabled={loading || !pin}
-                className="mt-2 sm:mt-0 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white px-4 py-2 text-xs font-bold transition shadow-md cursor-pointer flex items-center gap-1.5"
-                title="Copy PIN to clipboard"
-              >
-                {copied ? "✅ Copied!" : "📋 Copy PIN"}
-              </button>
-            </div>
+  if (error && !quizData && !gameCreated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4">
 
-            <p className="mt-2 text-xs text-slate-400">
-              Players visit <strong>/player/join</strong> (or click Join Quiz) and enter this PIN.
-            </p>
+        <div className="w-full max-w-md bg-white/10 border border-white/10 rounded-3xl p-8 text-center">
+
+          <div className="text-5xl mb-5">
+            ⚠️
           </div>
 
-          {/* Joined Players Section */}
-          <div className="mb-8 border-t border-white/10 pt-6">
-            <div className="flex items-center justify-between mb-4 px-2">
-              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>👥 Joined Players</span>
-                <span className="rounded-full bg-indigo-500/20 border border-indigo-400/30 px-2.5 py-0.5 text-xs font-black text-indigo-300">
-                  {players.length}
-                </span>
-              </h3>
+          <h2 className="text-2xl font-bold mb-3">
+            Something went wrong
+          </h2>
 
-              <button
-                onClick={handleAddDemoBot}
-                disabled={loading}
-                className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5"
-                title="Add a simulated player to test the game"
-              >
-                🤖 Add Demo Bot
-              </button>
+          <p className="text-red-300 mb-6">
+            {error}
+          </p>
+
+          <button
+            onClick={() => navigate("/host")}
+            className="w-full py-3 rounded-xl bg-white text-slate-950 font-bold hover:bg-slate-200 transition"
+          >
+            Back to Host
+          </button>
+
+        </div>
+
+      </div>
+    );
+  }
+
+
+  // --------------------------------------------------
+  // Quiz Loaded But Game Not Created
+  // --------------------------------------------------
+
+  if (!gameCreated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white px-4 py-10">
+
+        <div className="max-w-4xl mx-auto">
+
+          {/* Header */}
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
+
+            <div>
+              <p className="text-sm text-slate-400">
+                HOST LOBBY
+              </p>
+
+              <h1 className="text-3xl sm:text-4xl font-black mt-1">
+                Ready to Host?
+              </h1>
             </div>
 
-            {players.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-8 text-center">
-                <div className="text-4xl mb-2 animate-bounce">⏳</div>
-                <p className="text-sm font-semibold text-slate-300">
-                  Waiting for players to enter PIN...
+            <button
+              onClick={() => navigate("/host")}
+              className="px-5 py-2.5 rounded-xl bg-white/10 border border-white/10 hover:bg-white/20 transition"
+            >
+              ← Back
+            </button>
+
+          </div>
+
+
+          {/* Quiz Card */}
+
+          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8">
+
+            <div className="flex flex-col sm:flex-row gap-5 sm:items-center">
+
+              <div className="w-16 h-16 rounded-2xl bg-white text-slate-950 flex items-center justify-center text-3xl font-black shrink-0">
+                ?
+              </div>
+
+              <div className="flex-1">
+
+                <p className="text-sm text-slate-400">
+                  QUIZ
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Testing solo? Click <span className="font-bold text-indigo-300">&apos;Add Demo Bot&apos;</span> above!
+
+                <h2 className="text-2xl sm:text-3xl font-bold">
+                  {quizData?.title || "Untitled Quiz"}
+                </h2>
+
+                <p className="text-slate-400 mt-2">
+                  {quizData?.questions?.length || 0} questions
+                </p>
+
+              </div>
+
+            </div>
+
+
+            {/* Quiz Information */}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+
+              <div className="bg-black/20 rounded-2xl p-5">
+                <p className="text-slate-400 text-sm">
+                  Questions
+                </p>
+
+                <p className="text-2xl font-bold mt-1">
+                  {quizData?.questions?.length || 0}
                 </p>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto p-1">
-                {players.map((player, index) => (
-                  <div
-                    key={player.id || index}
-                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2.5 text-left transition hover:border-indigo-400/40 hover:bg-white/10"
-                  >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/30 text-xs font-black text-indigo-300">
-                      {index + 1}
-                    </span>
-                    <span className="text-xs sm:text-sm font-bold text-white truncate">
-                      {player.nickname}
-                    </span>
-                  </div>
-                ))}
+
+              <div className="bg-black/20 rounded-2xl p-5">
+                <p className="text-slate-400 text-sm">
+                  Mode
+                </p>
+
+                <p className="text-2xl font-bold mt-1">
+                  Live
+                </p>
+              </div>
+
+              <div className="bg-black/20 rounded-2xl p-5">
+                <p className="text-slate-400 text-sm">
+                  Timer
+                </p>
+
+                <p className="text-2xl font-bold mt-1">
+                  30 sec
+                </p>
+              </div>
+
+            </div>
+
+
+            {/* Error */}
+
+            {error && (
+              <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300">
+                {error}
               </div>
             )}
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center border-t border-white/10 pt-6">
-            <button
-              onClick={() => navigate("/host/create")}
-              className="w-full sm:w-auto rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-5 py-3 text-sm font-bold text-slate-300 transition cursor-pointer"
-            >
-              ⬅️ Edit Questions
-            </button>
+
+            {/* Create Button */}
 
             <button
-              onClick={handleStartGame}
-              disabled={loading || players.length === 0 || starting}
-              className="w-full sm:w-auto flex-1 rounded-xl bg-linear-to-r from-emerald-500 via-green-500 to-emerald-600 px-8 py-3.5 text-base font-black text-white shadow-xl shadow-green-900/40 transition hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              onClick={createLiveGame}
+              disabled={creatingGame}
+              className="w-full mt-8 py-4 rounded-2xl bg-white text-slate-950 font-black text-lg hover:bg-slate-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {starting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Starting Battle...
-                </span>
-              ) : players.length === 0 ? (
-                "Waiting for Players to Join..."
-              ) : (
-                `Start Game with ${players.length} Player${players.length > 1 ? "s" : ""} 🚀`
-              )}
+              {creatingGame
+                ? "Creating Live Game..."
+                : "🚀 Create Live Game"}
             </button>
+
           </div>
 
         </div>
 
       </div>
+    );
+  }
+
+
+  // --------------------------------------------------
+  // Main Lobby UI
+  // --------------------------------------------------
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white overflow-x-hidden">
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+
+
+        {/* =========================================
+            HEADER
+        ========================================= */}
+
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5 mb-8">
+
+          <div>
+
+            <div className="flex items-center gap-2 mb-2">
+
+              <span className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
+
+              <span className="text-sm font-semibold text-green-300">
+                LIVE LOBBY
+              </span>
+
+            </div>
+
+            <h1 className="text-2xl sm:text-4xl font-black">
+              {quizData?.title || "Quiz Lobby"}
+            </h1>
+
+            <p className="text-slate-400 mt-2">
+              Waiting for players to join...
+            </p>
+
+          </div>
+
+
+          <button
+            onClick={handleLeaveLobby}
+            className="px-5 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 hover:bg-red-500/20 transition"
+          >
+            Leave Lobby
+          </button>
+
+        </div>
+
+
+        {/* =========================================
+            GAME PIN
+        ========================================= */}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+
+          {/* PIN CARD */}
+
+          <div className="lg:col-span-2 bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-10 text-center">
+
+            <p className="text-sm sm:text-base font-semibold text-slate-400 uppercase tracking-widest">
+              Join Code
+            </p>
+
+            <div className="text-6xl sm:text-8xl font-black tracking-[0.15em] mt-4 mb-6">
+              {game.pin}
+            </div>
+
+            <p className="text-slate-400 mb-6">
+              Ask players to enter this code on the Join Game page.
+            </p>
+
+
+            <div className="flex flex-col sm:flex-row justify-center gap-3">
+
+              <button
+                onClick={handleCopyPin}
+                className="px-6 py-3 rounded-xl bg-white text-slate-950 font-bold hover:bg-slate-200 transition"
+              >
+                {copied
+                  ? "✓ Copied"
+                  : "Copy PIN"}
+              </button>
+
+              <button
+                onClick={handleCopyJoinLink}
+                className="px-6 py-3 rounded-xl bg-white/10 border border-white/10 font-bold hover:bg-white/20 transition"
+              >
+                Copy Join Link
+              </button>
+
+            </div>
+
+          </div>
+
+
+          {/* PLAYER COUNT */}
+
+          <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
+
+            <div>
+
+              <p className="text-sm text-slate-400">
+                PLAYERS JOINED
+              </p>
+
+              <p className="text-6xl font-black mt-3">
+                {players.length}
+              </p>
+
+            </div>
+
+            <div className="mt-8">
+
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-400">
+                  Lobby status
+                </span>
+
+                <span className="text-green-300 font-semibold">
+                  Waiting
+                </span>
+              </div>
+
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+
+                <div
+                  className="h-full bg-green-400 transition-all duration-500"
+                  style={{
+                    width:
+                      players.length > 0
+                        ? "100%"
+                        : "5%",
+                  }}
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* =========================================
+            ERROR
+        ========================================= */}
+
+        {error && (
+          <div className="mt-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-300">
+            {error}
+          </div>
+        )}
+
+
+        {/* =========================================
+            PLAYERS
+        ========================================= */}
+
+        <div className="mt-6 bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+
+            <div>
+
+              <h2 className="text-xl sm:text-2xl font-bold">
+                Players
+              </h2>
+
+              <p className="text-sm text-slate-400 mt-1">
+                Players will appear here automatically.
+              </p>
+
+            </div>
+
+            <div className="px-4 py-2 rounded-xl bg-white/10 text-sm font-semibold">
+              {players.length} joined
+            </div>
+
+          </div>
+
+
+          {players.length === 0 ? (
+
+            <div className="min-h-[220px] flex flex-col items-center justify-center text-center">
+
+              <div className="text-5xl mb-4">
+                👥
+              </div>
+
+              <h3 className="text-xl font-bold">
+                Waiting for players
+              </h3>
+
+              <p className="text-slate-400 mt-2 max-w-md">
+                Share the game PIN with your players.
+                They will appear here when they join.
+              </p>
+
+            </div>
+
+          ) : (
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[300px] overflow-y-auto pr-1">
+
+              {players.map((player, index) => (
+
+                <div
+                  key={player.id || `${player.name}-${index}`}
+                  className="bg-black/20 border border-white/10 rounded-2xl p-4 text-center hover:bg-white/10 transition"
+                >
+
+                  <div className="w-12 h-12 rounded-full bg-white text-slate-950 flex items-center justify-center mx-auto font-black text-lg">
+                    {(
+                      player.name ||
+                      player.nickname ||
+                      "P"
+                    )
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+
+                  <p className="font-semibold mt-3 truncate">
+                    {player.name ||
+                      player.nickname ||
+                      "Player"}
+                  </p>
+
+                  <p className="text-xs text-slate-500 mt-1">
+                    Player {index + 1}
+                  </p>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </div>
+
+
+        {/* =========================================
+            START GAME
+        ========================================= */}
+
+        <div className="mt-6 bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8">
+
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+            <div>
+
+              <h2 className="text-xl sm:text-2xl font-bold">
+                Ready to start?
+              </h2>
+
+              <p className="text-slate-400 mt-2">
+                {players.length === 0
+                  ? "Waiting for at least one player..."
+                  : `${players.length} player${players.length > 1 ? "s" : ""} ready to play.`}
+              </p>
+
+            </div>
+
+
+            <button
+              onClick={handleStartGame}
+              disabled={players.length === 0}
+              className="w-full lg:w-auto px-10 py-4 rounded-2xl bg-green-400 text-slate-950 font-black text-lg hover:bg-green-300 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              🚀 Start Game
+            </button>
+
+          </div>
+
+        </div>
+
+
+        {/* =========================================
+            HOW TO PLAY
+        ========================================= */}
+
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+
+            <div className="text-2xl mb-3">
+              1️⃣
+            </div>
+
+            <h3 className="font-bold">
+              Share the PIN
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              Give players the six-digit game PIN.
+            </p>
+
+          </div>
+
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+
+            <div className="text-2xl mb-3">
+              2️⃣
+            </div>
+
+            <h3 className="font-bold">
+              Players Join
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              Players enter their nickname and PIN.
+            </p>
+
+          </div>
+
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+
+            <div className="text-2xl mb-3">
+              3️⃣
+            </div>
+
+            <h3 className="font-bold">
+              Start Quiz
+            </h3>
+
+            <p className="text-sm text-slate-400 mt-2">
+              Start the game when everyone is ready.
+            </p>
+
+          </div>
+
+        </div>
+
+
+      </div>
+
     </div>
   );
-}
+};
+
+export default HostLobby;
